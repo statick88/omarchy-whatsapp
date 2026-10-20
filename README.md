@@ -85,11 +85,21 @@ systemctl --user edit omarchy-whatsapp     # Environment=OMARCHY_WHATSAPP_PAIRIN
 | Refresh chats | Refresh button, or `r` |
 | Open a chat | `Enter` |
 | Reply | Type, then `Enter` |
+| Attach an image or a file | The paperclip next to the reply box, then `Enter` to send |
 | Back to the chat list | `Escape` |
 | Close the panel | `Escape` from the list |
 | Full WhatsApp Web | Right-click the icon, or the ⧉ button in the panel |
 | Log out | Power button on the chat list |
 | Open a chat from a notification | Click the notification |
+
+A file is sent as an image, a video or a document, depending on what it is, and
+whatever was typed in the reply box travels as its caption. The name of the
+file you picked shows under the box; click it to take the file back. The same
+thing from a terminal:
+
+```sh
+omarchy-whatsapp-ctl send-media <jid> <file> [caption]
+```
 
 Pinned chats sit on top in the phone's pin order, and the list tabs mirror
 the Favourites and custom lists from your phone. The daemon reads both from
