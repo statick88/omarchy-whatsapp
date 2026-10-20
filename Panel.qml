@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -246,16 +247,48 @@ Panel {
 
   function sendReply() {
     var text = composer.text
-    if (!text || !text.trim().length) return
+    var path = root.attachmentPath
+    // A file on its own is a message too: the text is its caption.
+    if ((!text || !text.trim().length) && !path) return
     if (!root.client || !root.client.ready) {
       root.statusLine = "Not connected to WhatsApp"
       return
     }
-    if (root.client.sendMessage(root.activeJid, text)) {
+
+    var sent = false
+    if (path) sent = root.client.sendMedia(root.activeJid, path, text)
+    else sent = root.client.sendMessage(root.activeJid, text)
+
+    if (sent) {
       composer.text = ""
+      root.clearAttachment()
       root.statusLine = ""
       typingTimer.stop()
       root.client.setTyping(root.activeJid, "paused")
+    }
+  }
+
+  // ---- attaching a file --------------------------------------------------
+  //
+  // The platform's own file dialog picks it, and the name of what was picked
+  // sits under the composer until it is sent or taken back.
+  property string attachmentPath: ""
+  property string attachmentName: ""
+
+  function clearAttachment() {
+    root.attachmentPath = ""
+    root.attachmentName = ""
+  }
+
+  FileDialog {
+    id: fileDialog
+    title: "Send a file"
+    onAccepted: {
+      var url = String(selectedFile || "")
+      if (url.length === 0) return
+      var path = decodeURIComponent(url.replace(/^file:\/\//, ""))
+      root.attachmentPath = path
+      root.attachmentName = path.split("/").pop()
     }
   }
 
@@ -378,7 +411,7 @@ Panel {
     }
 
     function onCommandFailed(command, message) {
-      if (command === "send" || command === "listMember") root.statusLine = message
+      if (command === "send" || command === "sendMedia" || command === "listMember") root.statusLine = message
       if (command === "refresh") {
         root.refreshing = false
         refreshWatchdog.stop()
@@ -1068,14 +1101,53 @@ Panel {
           }
 
           // ── Inline reply ───────────────────────────────────────────────
+          //
+          // What is about to be sent, so it can be seen and taken back.
+          Rectangle {
+            id: attachmentChip
+            visible: root.attachmentPath.length > 0
+            width: attachmentRow.implicitWidth + Style.space(12)
+            height: attachmentRow.implicitHeight + Style.space(6)
+            radius: Style.cornerRadius
+            color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.08)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: composerRow.top
+            anchors.bottomMargin: Style.space(4)
+
+            Row {
+              id: attachmentRow
+              anchors.centerIn: parent
+              spacing: Style.space(6)
+
+              Text {
+                text: root.attachmentName
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideMiddle
+              }
+              Text {
+                text: "\u00d7"
+                color: root.secondaryForeground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+            }
+
+            TapHandler {
+              onTapped: root.clearAttachment()
+            }
+          }
+
           Item {
+            id: composerRow
             width: parent.width
             implicitHeight: Math.max(composer.implicitHeight, sendButton.implicitHeight)
 
             TextField {
               id: composer
               anchors.left: parent.left
-              anchors.right: sendButton.left
+              anchors.right: attachButton.left
               anchors.rightMargin: Style.space(6)
               anchors.verticalCenter: parent.verticalCenter
               foreground: root.foreground
@@ -1096,12 +1168,25 @@ Panel {
             }
 
             PanelActionButton {
+              id: attachButton
+              anchors.right: sendButton.left
+              anchors.rightMargin: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              iconText: "\uf0c6"
+              tooltipText: "Attach an image or a file"
+              enabled: root.linked
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onClicked: fileDialog.open()
+            }
+
+            PanelActionButton {
               id: sendButton
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               iconText: "\uf1d8"
               tooltipText: "Send"
-              enabled: root.linked && composer.text.trim().length > 0
+              enabled: root.linked && (composer.text.trim().length > 0 || root.attachmentPath.length > 0)
               foreground: root.foreground
               fontFamily: root.fontFamily
               onClicked: root.sendReply()
