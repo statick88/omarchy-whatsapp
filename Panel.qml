@@ -28,6 +28,9 @@ Panel {
   property var messages: []
   property int cursorIndex: 0
   property string statusLine: ""
+  // What is waiting for the daemon to accept, and what to put back if it does
+  // not: { jid, text, path }.
+  property var pendingSend: null
   property bool pinToLatest: true
   property bool logoutConfirmOpen: false
   property bool refreshing: false
@@ -149,6 +152,9 @@ Panel {
   // User-initiated open: marks the chat read and puts the cursor in the reply box.
   function selectChat(jid) {
     root.prepareChat(jid)
+    // A file picked for one conversation must not travel to another: it goes
+    // with the chat it was picked for.
+    if (root.attachmentChat !== jid) root.clearAttachment()
     if (!root.client) return
     root.client.markRead(jid)
     Qt.callLater(function () { composer.forceActiveFocus() })
@@ -260,8 +266,9 @@ Panel {
     else sent = root.client.sendMessage(root.activeJid, text)
 
     if (sent) {
-      composer.text = ""
-      root.clearAttachment()
+      // The composer keeps what was typed until the daemon says the message
+      // went out: a file it refuses must not cost the caption either.
+      root.pendingSend = { jid: root.activeJid, text: text, path: path }
       root.statusLine = ""
       typingTimer.stop()
       root.client.setTyping(root.activeJid, "paused")
@@ -271,13 +278,16 @@ Panel {
   // ---- attaching a file --------------------------------------------------
   //
   // The platform's own file dialog picks it, and the name of what was picked
-  // sits under the composer until it is sent or taken back.
+  // sits above the composer until it is sent or taken back.
   property string attachmentPath: ""
   property string attachmentName: ""
+  // The conversation the file was picked for.
+  property string attachmentChat: ""
 
   function clearAttachment() {
     root.attachmentPath = ""
     root.attachmentName = ""
+    root.attachmentChat = ""
   }
 
   FileDialog {
@@ -286,9 +296,17 @@ Panel {
     onAccepted: {
       var url = String(selectedFile || "")
       if (url.length === 0) return
-      var path = decodeURIComponent(url.replace(/^file:\/\//, ""))
+      // A name with a stray percent sign is not a broken escape sequence, so
+      // the decoder must not be allowed to throw here.
+      var path = ""
+      try {
+        path = decodeURIComponent(url.replace(/^file:\/\//, ""))
+      } catch (err) {
+        path = url.replace(/^file:\/\//, "")
+      }
       root.attachmentPath = path
       root.attachmentName = path.split("/").pop()
+      root.attachmentChat = root.activeJid
     }
   }
 
@@ -399,6 +417,14 @@ Panel {
       if (root.opened && root.client && root.client.ready) root.client.markRead(jid)
     }
 
+    function onSendAcknowledged(jid) {
+      // The daemon took the message: now the composer can let go of it.
+      if (!root.pendingSend || root.pendingSend.jid !== jid) return
+      composer.text = ""
+      root.clearAttachment()
+      root.pendingSend = null
+    }
+
     function onMessageStatusChanged(jid, messageId, status) {
       // Receipt JIDs are often a LID or device-suffixed form that does not
       // equal activeJid. Apply by message id in the open thread.
@@ -412,6 +438,12 @@ Panel {
 
     function onCommandFailed(command, message) {
       if (command === "send" || command === "sendMedia" || command === "listMember") root.statusLine = message
+      // The daemon refused it: the caption and the file go back, so trying
+      // again does not mean picking the file and typing it all again.
+      if (command === "sendMedia" && root.pendingSend) {
+        composer.text = root.pendingSend.text || composer.text
+        root.pendingSend = null
+      }
       if (command === "refresh") {
         root.refreshing = false
         refreshWatchdog.stop()

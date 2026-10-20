@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, truncateSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -70,15 +70,23 @@ test('a file that is not there is refused with a clear reason', () => {
 
 test('a file over the size limit is refused with the limit in the reason', () => {
   const path = tempFile('big.bin', 8)
-  assert.throws(() => prepareUpload(path, { size: MAX_UPLOAD_BYTES + 1 }), /too large/i)
-  assert.throws(() => prepareUpload(path, { size: MAX_UPLOAD_BYTES + 1 }), /16 MB/)
+  // A sparse file: over the limit as a file, almost nothing on the disk.
+  truncateSync(path, MAX_UPLOAD_BYTES + 1)
+  assert.throws(() => prepareUpload(path), /too large/i)
+  assert.throws(() => prepareUpload(path), /16 MB/)
 })
 
 test('a file at the size limit is allowed', () => {
   const path = tempFile('exact.bin', 8)
-  const upload = prepareUpload(path, { size: MAX_UPLOAD_BYTES })
+  truncateSync(path, MAX_UPLOAD_BYTES)
+  const upload = prepareUpload(path)
   assert.equal(upload.size, MAX_UPLOAD_BYTES)
   assert.equal(upload.kind, 'document')
+})
+
+test('a directory is not a file to send', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-upload-'))
+  assert.throws(() => prepareUpload(dir), /not a file/i)
 })
 
 test('a prepared upload knows its kind, name, mime type and size', () => {
@@ -91,13 +99,13 @@ test('a prepared upload knows its kind, name, mime type and size', () => {
   assert.equal(upload.size, 4)
 })
 
-test('the image payload carries the path, the mime type and the name', () => {
+test('the image payload carries the path and the mime type', () => {
   const upload = { path: '/tmp/photo.png', kind: 'image', mimetype: 'image/png', fileName: 'photo.png', size: 10 }
   const message = mediaMessageFor(upload)
   assert.deepEqual(message, { image: { url: '/tmp/photo.png' }, mimetype: 'image/png' })
 })
 
-test('the document payload carries the name, which WhatsApp shows', () => {
+test('the document payload carries the name, which is what WhatsApp shows for a file', () => {
   const upload = { path: '/tmp/notes.pdf', kind: 'document', mimetype: 'application/pdf', fileName: 'notes.pdf', size: 10 }
   const message = mediaMessageFor(upload)
   assert.deepEqual(message, {

@@ -68,22 +68,23 @@ export function displayNameFor(filename) {
 // Everything the daemon needs to send one file: where it is, what WhatsApp
 // should call it, and what kind of message it becomes.
 //
-// The size is what the file actually weighs on disk. A caller that already
-// knows the size may pass it, which keeps the check testable without writing
-// sixteen megabytes to disk.
-export function prepareUpload(path, options = {}) {
+// The size is what the file actually weighs on disk, measured here so that no
+// caller can claim a different one.
+export function prepareUpload(path) {
   const target = String(path || '')
   if (!target) throw new Error('send-media: no file given')
 
-  let size = options.size
-  if (size === undefined) {
-    try {
-      size = statSync(target).size
-    } catch (err) {
-      if (err && err.code === 'ENOENT') throw new Error(`send-media: file not found: ${target}`)
-      throw new Error(`send-media: cannot read ${target}: ${err?.message || err}`)
-    }
+  let info
+  try {
+    info = statSync(target)
+  } catch (err) {
+    if (err && err.code === 'ENOENT') throw new Error(`send-media: file not found: ${target}`)
+    throw new Error(`send-media: cannot read ${target}: ${err?.message || err}`)
   }
+  // A directory, a device or a pipe is not a file to send, and its size says
+  // nothing about what would be uploaded.
+  if (!info.isFile()) throw new Error(`send-media: not a file: ${target}`)
+  const size = info.size
 
   if (size > MAX_UPLOAD_BYTES) {
     throw new Error(`send-media: file is too large (16 MB max): ${target}`)
@@ -102,9 +103,10 @@ export function prepareUpload(path, options = {}) {
 
 // The message Baileys sends for one prepared upload.
 //
-// The file name and the mime type sit at the top level, not inside the media
-// object: Baileys reads them from there when it builds the WhatsApp message,
-// and a document without a name arrives called "file".
+// The mime type sits at the top level, not inside the media object: Baileys
+// reads it from there when it builds the WhatsApp message. The file name does
+// too, but only a document carries one: a picture is a picture, and a video
+// is a video, while a document arrives as a file with a name of its own.
 export function mediaMessageFor(upload, caption) {
   const message = {}
   const media = { url: upload.path }

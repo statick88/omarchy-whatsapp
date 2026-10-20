@@ -69,7 +69,7 @@ test('a sendMedia frame reaches WhatsApp as an image', async () => {
     (payload, reply) => handleSendMedia(payload, reply, {
       sock,
       connection: 'open',
-      store: { canonicalJid: (jid) => jid, routingJid: (jid) => jid },
+      store: { routingJid: (jid) => jid },
       deliver: () => {}
     }),
     async (socketPath) => {
@@ -103,7 +103,7 @@ test('a file that is not an image goes out as a document with its name', async (
     (payload, reply) => handleSendMedia(payload, reply, {
       sock,
       connection: 'open',
-      store: { canonicalJid: (jid) => jid, routingJid: (jid) => jid },
+      store: { routingJid: (jid) => jid },
       deliver: () => {}
     }),
     async (socketPath) => {
@@ -135,7 +135,7 @@ test('the sent message is handed on so the panel can show it', async () => {
     (payload, reply) => handleSendMedia(payload, reply, {
       sock,
       connection: 'open',
-      store: { canonicalJid: (jid) => jid, routingJid: (jid) => jid },
+      store: { routingJid: (jid) => jid },
       deliver: (jid, rawJid, sent) => delivered.push({ jid, rawJid, sent })
     }),
     async (socketPath) => {
@@ -157,7 +157,7 @@ test('a request without a file is refused and says why', async () => {
     (payload, reply) => handleSendMedia(payload, reply, {
       sock: { async sendMessage() { throw new Error('should not send') } },
       connection: 'open',
-      store: { canonicalJid: (jid) => jid, routingJid: (jid) => jid },
+      store: { routingJid: (jid) => jid },
       deliver: () => {}
     }),
     async (socketPath) => {
@@ -178,7 +178,7 @@ test('a file that is not there is refused with the reason', async () => {
     (payload, reply) => handleSendMedia(payload, reply, {
       sock: { async sendMessage() { throw new Error('should not send') } },
       connection: 'open',
-      store: { canonicalJid: (jid) => jid, routingJid: (jid) => jid },
+      store: { routingJid: (jid) => jid },
       deliver: () => {}
     }),
     async (socketPath) => {
@@ -202,7 +202,7 @@ test('nothing is sent while WhatsApp is not connected', async () => {
     (payload, reply) => handleSendMedia(payload, reply, {
       sock: { async sendMessage() { sends += 1 } },
       connection: 'connecting',
-      store: { canonicalJid: (jid) => jid, routingJid: (jid) => jid },
+      store: { routingJid: (jid) => jid },
       deliver: () => {}
     }),
     async (socketPath) => {

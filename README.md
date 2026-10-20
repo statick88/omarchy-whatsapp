@@ -94,8 +94,8 @@ systemctl --user edit omarchy-whatsapp     # Environment=OMARCHY_WHATSAPP_PAIRIN
 
 A file is sent as an image, a video or a document, depending on what it is, and
 whatever was typed in the reply box travels as its caption. The name of the
-file you picked shows under the box; click it to take the file back. The same
-thing from a terminal:
+file you picked shows above the box; click it to take the file back, and it
+goes with the conversation it was picked for. The same thing from a terminal:
 
 ```sh
 omarchy-whatsapp-ctl send-media <jid> <file> [caption]
