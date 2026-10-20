@@ -3,6 +3,7 @@
 // `npm install` has ever run in daemon/.
 
 import net from 'node:net'
+import { resolve } from 'node:path'
 import { socketPath } from './lib/paths.js'
 
 const [command, ...args] = process.argv.slice(2)
@@ -50,7 +51,10 @@ function buildRequest() {
       return {
         t: 'sendMedia',
         jid: args[0],
-        path: args[1],
+        // The daemon is another process with its own working directory, so a
+        // relative path would name a file over there instead of the one named
+        // here. It is resolved before it crosses the socket.
+        path: resolve(args[1]),
         caption: args.slice(2).join(' ')
       }
     case 'read':
