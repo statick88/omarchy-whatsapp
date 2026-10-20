@@ -21,6 +21,7 @@ import { Notifier } from './lib/notify.js'
 import { Bus } from './lib/server.js'
 import { extractImage, isGroupJid, isIgnorableChat, isPhotoPlaceholder, isSilent, messageText, messageType, prettyJid } from './lib/message.js'
 import { existingMediaPath, MediaCache } from './lib/media.js'
+import { handleSendMedia } from './lib/send.js'
 import {
   applyChatNotificationPreferences,
   isChatMuted,
@@ -1173,6 +1174,28 @@ async function refreshMissingImages(jid, list) {
   }
 }
 
+// A message that left this machine: show it in every panel, and remember it
+// so a retry can find it.
+//
+// generateWAMessage stamps PENDING. relayMessage has already succeeded by the
+// time this runs, so the server has the stanza — show a single tick
+// immediately.
+function deliverOutgoing(routingJid, rawJid, sent) {
+  if (!sent) return
+  if (asStatus(sent.status) < MSG_SERVER_ACK) sent.status = MSG_SERVER_ACK
+  const res = ingest(routingJid, sent)
+  if (!res) return
+  const { message, canonicalTarget } = res
+  if ((message.status || 0) < MSG_SERVER_ACK) {
+    message.status = MSG_SERVER_ACK
+    store.upsertMessage(canonicalTarget, message)
+  }
+  store.rememberRetryMessage(canonicalTarget, message.id, sent.message)
+  bus.broadcast({ t: 'message', jid: rawJid, message: publicMessage(message), chat: store.publicChat(canonicalTarget), unread: store.totalUnread() })
+  applyMessageStatus(canonicalTarget, message.id, MSG_SERVER_ACK)
+  pushChats()
+}
+
 async function handleCommand(payload, reply) {
   const { t, id } = payload
   switch (t) {
@@ -1286,24 +1309,18 @@ async function handleCommand(payload, reply) {
       }
 
       const sent = await sock.sendMessage(routingJid, { text }, options)
-      if (sent) {
-        // generateWAMessage stamps PENDING. relayMessage has already succeeded
-        // here, so the server has the stanza — show a single tick immediately.
-        if (asStatus(sent.status) < MSG_SERVER_ACK) sent.status = MSG_SERVER_ACK
-        const res = ingest(routingJid, sent)
-        if (res) {
-          const { message, canonicalTarget } = res
-          if ((message.status || 0) < MSG_SERVER_ACK) {
-            message.status = MSG_SERVER_ACK
-            store.upsertMessage(canonicalTarget, message)
-          }
-          store.rememberRetryMessage(canonicalTarget, message.id, sent.message)
-          bus.broadcast({ t: 'message', jid: rawJid, message: publicMessage(message), chat: store.publicChat(canonicalTarget), unread: store.totalUnread() })
-          applyMessageStatus(canonicalTarget, message.id, MSG_SERVER_ACK)
-          pushChats()
-        }
-      }
+      deliverOutgoing(routingJid, rawJid, sent)
       reply({ t: 'ack', id, ok: true, jid: rawJid })
+      return
+    }
+
+    case 'sendMedia': {
+      await handleSendMedia(payload, reply, {
+        sock,
+        connection,
+        store,
+        deliver: deliverOutgoing
+      })
       return
     }
 

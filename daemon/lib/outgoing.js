@@ -1,0 +1,128 @@
+import { statSync } from 'node:fs'
+import { basename, extname } from 'node:path'
+
+// The media that leaves this machine, kept apart from the media that comes in:
+// messages-media.js reads what arrives, this file decides what goes out.
+//
+// Everything here is pure enough to test without WhatsApp: the daemon calls
+// prepareUpload() on a path the user picked, and mediaMessageFor() turns that
+// into the shape Baileys sends.
+
+// WhatsApp's own cap for a document. A photo is sent as it is, so the same
+// limit applies to everything this plugin can send.
+export const MAX_UPLOAD_BYTES = 16 * 1024 * 1024
+
+const MIME_TYPES = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+  '.heic': 'image/heic',
+  '.mp4': 'video/mp4',
+  '.3gp': 'video/3gpp',
+  '.mov': 'video/quicktime',
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.md': 'text/markdown',
+  '.json': 'application/json',
+  '.zip': 'application/zip',
+  '.gz': 'application/gzip',
+  '.tar': 'application/x-tar',
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheet.sheet'
+}
+
+const DEFAULT_MIMETYPE = 'application/octet-stream'
+
+// Which WhatsApp kind a file goes out as. Anything that is not a picture or a
+// video is a document: WhatsApp shows those with their own name, which is what
+// the user wants for "a file".
+export function mediaKindFor(mimetype) {
+  const type = String(mimetype || '').toLowerCase()
+  if (type.startsWith('image/')) return 'image'
+  if (type.startsWith('video/')) return 'video'
+  return 'document'
+}
+
+// The mime type of a file, from its extension. The name is what the user sees
+// on their disk, so this is the only thing that can say what a file is.
+export function mimetypeFor(filename) {
+  const extension = extname(String(filename || '')).toLowerCase()
+  return MIME_TYPES[extension] || DEFAULT_MIMETYPE
+}
+
+// The name that travels with the file. Only the last part of the path goes:
+// the name is shown on the other end, and a path would say more about this
+// machine than the person on the other end needs to know.
+export function displayNameFor(filename) {
+  const name = basename(String(filename || ''))
+  // Control characters would travel inside the name and render as nothing.
+  const cleaned = name.replace(/[\u0000-\u001f\u007f]/g, '')
+  return cleaned.length > 0 ? cleaned : 'file'
+}
+
+// Everything the daemon needs to send one file: where it is, what WhatsApp
+// should call it, and what kind of message it becomes.
+//
+// The size is what the file actually weighs on disk. A caller that already
+// knows the size may pass it, which keeps the check testable without writing
+// sixteen megabytes to disk.
+export function prepareUpload(path, options = {}) {
+  const target = String(path || '')
+  if (!target) throw new Error('send-media: no file given')
+
+  let size = options.size
+  if (size === undefined) {
+    try {
+      size = statSync(target).size
+    } catch (err) {
+      if (err && err.code === 'ENOENT') throw new Error(`send-media: file not found: ${target}`)
+      throw new Error(`send-media: cannot read ${target}: ${err?.message || err}`)
+    }
+  }
+
+  if (size > MAX_UPLOAD_BYTES) {
+    throw new Error(`send-media: file is too large (16 MB max): ${target}`)
+  }
+
+  const fileName = displayNameFor(target)
+  const mimetype = mimetypeFor(fileName)
+  return {
+    path: target,
+    kind: mediaKindFor(mimetype),
+    mimetype,
+    fileName,
+    size
+  }
+}
+
+// The message Baileys sends for one prepared upload.
+//
+// The file name and the mime type sit at the top level, not inside the media
+// object: Baileys reads them from there when it builds the WhatsApp message,
+// and a document without a name arrives called "file".
+export function mediaMessageFor(upload, caption) {
+  const message = {}
+  const media = { url: upload.path }
+
+  if (upload.kind === 'image') {
+    message.image = media
+    message.mimetype = upload.mimetype
+  } else if (upload.kind === 'video') {
+    message.video = media
+    message.mimetype = upload.mimetype
+  } else {
+    message.document = media
+    message.fileName = upload.fileName
+    message.mimetype = upload.mimetype
+  }
+
+  const text = String(caption || '').trim()
+  if (text) message.caption = text
+
+  return message
+}

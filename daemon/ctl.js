@@ -14,6 +14,7 @@ const USAGE = `Usage: omarchy-whatsapp-ctl <command> [args]
   refresh [jid] [limit]  resync chats from WhatsApp, then dump the list
   messages <jid> [limit] a chat's recent messages as JSON
   send <jid> <text...>   send a text message
+  send-media <jid> <file> [caption...]  send an image or a file
   read <jid>             mark a chat read
   focus <jid>            select that chat in every open bar panel
   login                  start QR pairing (stops after 5 minutes)
@@ -44,6 +45,14 @@ function buildRequest() {
     case 'send':
       if (args.length < 2) fail('send: jid and text required')
       return { t: 'send', jid: args[0], text: args.slice(1).join(' ') }
+    case 'send-media':
+      if (args.length < 2) fail('send-media: jid and file required')
+      return {
+        t: 'sendMedia',
+        jid: args[0],
+        path: args[1],
+        caption: args.slice(2).join(' ')
+      }
     case 'read':
       if (!args[0]) fail('read: jid required')
       return { t: 'read', jid: args[0] }
