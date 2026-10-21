@@ -42,8 +42,9 @@ Panel {
   property string recordingChat: ""
   // Where a recording is written. The runtime directory belongs to the user
   // alone and is wiped at logout, which /tmp is not: anything in /tmp can be
-  // read by every user on the machine.
-  readonly property string recordingDir: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
+  // read by every user on the machine. There is no fallback on purpose: a
+  // private voice recording is not worth writing where everyone can read it.
+  readonly property string recordingDir: Model.recordingDirectory(Quickshell.env("XDG_RUNTIME_DIR"))
   // True between asking the recorder to stop and the file being finished.
   property bool waitingForRecording: false
   // The staging requests, one at a time: the staging process reads the file
@@ -358,6 +359,14 @@ Panel {
     stager.running = true
   }
 
+  // The message on its way is given up on: the composer is free again, and
+  // what is in it stays.
+  function releasePendingSend() {
+    if (!root.pendingSend) return
+    root.pendingSend = null
+    sendWatchdog.stop()
+  }
+
   // A voice note is played where it sits. A second press stops it.
   function toggleAudio(message) {
     if (!message || !message.imagePath) return
@@ -373,6 +382,12 @@ Panel {
 
   function startRecording() {
     if (root.recording) return
+    // A recording is a private thing: it is only written where the user
+    // alone can read it.
+    if (root.recordingDir.length === 0) {
+      root.statusLine = "There is no private directory to record into"
+      return
+    }
     // Every recording gets a name of its own: there is one panel per monitor,
     // and two of them recording at the same time must not write over each
     // other.
@@ -545,8 +560,14 @@ Panel {
       // file picked after it are the user's, and they stay.
       composer.text = Model.afterAcknowledge(composer.text, root.pendingSend.text)
       if (root.attachmentPath === root.pendingSend.path) root.clearAttachment()
-      root.pendingSend = null
-      sendWatchdog.stop()
+      root.releasePendingSend()
+    }
+
+    function onLinkUpChanged() {
+      // The daemon went away: the message that was on its way did not go
+      // out, and the composer is free again. What is in it stays.
+      if (!root.client || root.client.linkUp) return
+      root.releasePendingSend()
     }
 
     function onMessageStatusChanged(jid, messageId, status) {
@@ -565,10 +586,9 @@ Panel {
       // The daemon refused it: the caption goes back, so trying again does
       // not mean typing it all again. It does not go over what was typed
       // since, and the file stays where it is: it can be tried again.
-      if (root.pendingSend && root.pendingSend.id === id) {
+      if (Model.failureFreesSend(command, root.pendingSend, id)) {
         composer.text = Model.restoredAfterFailure(composer.text, root.pendingSend.text)
-        root.pendingSend = null
-        sendWatchdog.stop()
+        root.releasePendingSend()
       }
       if (command === "refresh") {
         root.refreshing = false
@@ -719,15 +739,23 @@ Panel {
     onTriggered: if (root.client && root.activeJid) root.client.setTyping(root.activeJid, "paused")
   }
 
-  // The daemon always answers, but if it does not the composer would stay
-  // locked against a second send for ever. After a while the message is
-  // given up on: what is in the composer stays, and it can be sent again.
+  // The daemon always answers, but it can take a while: a file of sixteen
+  // megabytes goes up on a connection that is not always quick. The message
+  // stays on its way until the answer arrives, so it is not sent twice. If
+  // the daemon is gone, the message did not go out and the composer is free
+  // again.
   Timer {
     id: sendWatchdog
     interval: 30000
     repeat: false
     onTriggered: {
-      root.pendingSend = null
+      if (root.client && Model.messageStillInFlight(root.client.linkUp)) {
+        // The daemon is still there: the upload is probably still running.
+        root.statusLine = "The message is still on its way"
+        sendWatchdog.restart()
+        return
+      }
+      root.releasePendingSend()
       root.statusLine = "The daemon did not answer; the message was not sent"
     }
   }

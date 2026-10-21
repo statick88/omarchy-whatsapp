@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 // evaluated as it would be in the shell.
 const HERE = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(join(HERE, '../../Model.js'), 'utf8').replace(/^\.pragma library\s*$/m, '')
-const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure, attachmentChatFor, canSendNow }`)()
+const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure, attachmentChatFor, canSendNow, recordingDirectory, messageStillInFlight, failureFreesSend }`)()
 
 test('a voice note is written the way a phone writes it', () => {
   assert.equal(model.formatDuration(0), '0:00')
@@ -72,4 +72,34 @@ test('a message that is on its way is not sent twice', () => {
   assert.equal(model.canSendNow(null), true)
   assert.equal(model.canSendNow(undefined), true)
   assert.equal(model.canSendNow({ id: 'r1', jid: 'a@s.whatsapp.net' }), false)
+})
+
+test('a recording is only written where the user alone can read it', () => {
+  // The runtime directory belongs to the user and is wiped at logout.
+  assert.equal(model.recordingDirectory('/run/user/1000'), '/run/user/1000')
+  // There is no fallback: a private voice recording is not worth writing
+  // where every user on the machine can read it.
+  assert.equal(model.recordingDirectory(''), '')
+  assert.equal(model.recordingDirectory(undefined), '')
+})
+
+test('a message the daemon still holds is still on its way', () => {
+  // The daemon is there: the upload is probably still running.
+  assert.equal(model.messageStillInFlight(true), true)
+  // The daemon is gone: the message did not go out.
+  assert.equal(model.messageStillInFlight(false), false)
+})
+
+test('a failure frees the composer only when it is about the message', () => {
+  const pending = { id: 'r1', jid: 'a@s.whatsapp.net' }
+  assert.equal(model.failureFreesSend('sendMedia', pending, 'r1'), true)
+  // A failure about another message says nothing about this one.
+  assert.equal(model.failureFreesSend('sendMedia', pending, 'r2'), false)
+  // Another command failing says nothing about it either.
+  assert.equal(model.failureFreesSend('refresh', pending, 'r1'), false)
+  // A failure without an id is about the message that is the only one on its
+  // way.
+  assert.equal(model.failureFreesSend('sendMedia', pending, ''), true)
+  // Nothing on its way, nothing to free.
+  assert.equal(model.failureFreesSend('sendMedia', null, 'r1'), false)
 })

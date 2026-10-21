@@ -116,6 +116,34 @@ function canSendNow(pending) {
   return !pending
 }
 
+// Where a recording is written.
+//
+// The runtime directory belongs to the user alone and is wiped at logout.
+// There is no fallback on purpose: a private voice recording is not worth
+// writing where every user on the machine can read it.
+function recordingDirectory(runtimeDir) {
+  return String(runtimeDir || "")
+}
+
+// Whether a message that has not been answered yet is still on its way.
+//
+// The daemon is still there: the upload is probably still running, and the
+// message is not sent again. The daemon is gone: it did not go out.
+function messageStillInFlight(linkUp) {
+  return linkUp === true
+}
+
+// Whether a failure frees the composer.
+//
+// The failure has to be about the message that is on its way: another
+// command failing says nothing about it. A failure without an id is about
+// the message that is the only one on its way.
+function failureFreesSend(command, pending, id) {
+  if (!pending) return false
+  if (command !== "send" && command !== "sendMedia") return false
+  return pending.id === id || id === ""
+}
+
 function chatTitle(chat) {
   if (!chat) return ""
   return chat.name || prettyJid(chat.jid)
