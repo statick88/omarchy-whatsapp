@@ -16,10 +16,12 @@ export function stageOutgoing(source) {
   const name = basename(String(source || ''))
   if (!name) throw new Error('stage: no file given')
 
-  // The clock alone is not enough: two files staged in the same millisecond
-  // would land on each other.
+  // Each staged file gets its own directory, so the name that travels is the
+  // name the user gave it and two files of the same name never land on each
+  // other. The clock alone is not enough: two files staged in the same
+  // millisecond would collide.
   staged += 1
-  const target = join(mediaDir, 'outgoing', `${Date.now()}-${staged}-${name}`)
+  const target = join(mediaDir, 'outgoing', `${Date.now()}-${staged}`, name)
   mkdirSync(dirname(target), { recursive: true, mode: 0o700 })
   copyFileSync(source, target)
   return target

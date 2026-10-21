@@ -325,7 +325,9 @@ Panel {
 
   function startRecording() {
     if (root.recording) return
-    var path = "/tmp/omarchy-whatsapp-voice-" + Date.now() + ".m4a"
+    // The name the other end sees is the name of the file, so it is a plain
+    // name and not the name of a temporary.
+    var path = "/tmp/omarchy-whatsapp-recording/voice-note.m4a"
     recorder.outputLocation = "file://" + path
     recorder.record()
     root.recording = true
@@ -574,11 +576,20 @@ Panel {
     property string target: ""
     command: ["ffmpeg", "-y", "-loglevel", "error", "-i", converter.source, "-c:a", "libopus", "-b:a", "32k", converter.target]
     onExited: function (exitCode) {
-      // Without a converter the recording is still worth sending, as a file.
-      stager.source = exitCode === 0 ? converter.target : converter.source
-      stager.voice = true
+      if (exitCode === 0 && root.recordingPath.length > 0) {
+        stager.source = converter.target
+        stager.voice = true
+        stager.running = true
+        root.statusLine = ""
+        return
+      }
+      // Without opus the recording is not a voice note: WhatsApp plays a voice
+      // note in place and this one would not play at all. It goes as a file,
+      // and the person sending it is told that is what happened.
+      stager.source = converter.source
+      stager.voice = false
       stager.running = true
-      root.statusLine = ""
+      root.statusLine = "The recording could not be turned into a voice note; it goes as a file"
     }
   }
 

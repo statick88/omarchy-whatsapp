@@ -47,19 +47,26 @@ function buildRequest() {
     case 'send':
       if (args.length < 2) fail('send: jid and text required')
       return { t: 'send', jid: args[0], text: args.slice(1).join(' ') }
-    case 'send-media':
+    case 'send-media': {
       if (args.length < 2) fail('send-media: jid and file required')
+      // The daemon is another process with its own working directory, so a
+      // relative path would name a file over there instead of the one named
+      // here. It is resolved before it crosses the socket, and then copied
+      // where the daemon can read it: it runs with a private /tmp and would
+      // not see a file the user picked in their own shell.
+      let staged
+      try {
+        staged = stageOutgoing(resolve(args[1]))
+      } catch (err) {
+        fail(`send-media: ${err?.message || err}`)
+      }
       return {
         t: 'sendMedia',
         jid: args[0],
-        // The daemon is another process with its own working directory, so a
-        // relative path would name a file over there instead of the one named
-        // here. It is resolved before it crosses the socket, and then copied
-        // where the daemon can read it: it runs with a private /tmp and would
-        // not see a file the user picked in their own shell.
-        path: stageOutgoing(resolve(args[1])),
+        path: staged,
         caption: args.slice(2).join(' ')
       }
+    }
     case 'read':
       if (!args[0]) fail('read: jid required')
       return { t: 'read', jid: args[0] }

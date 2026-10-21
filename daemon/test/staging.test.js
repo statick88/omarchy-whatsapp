@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 import { stageOutgoing } from '../lib/staging.js'
 
@@ -37,6 +37,19 @@ test('two files with the same name do not land on each other', () => {
   assert.notEqual(first, second)
   assert.equal(readFileSync(first, 'utf8'), 'one')
   assert.equal(readFileSync(second, 'utf8'), 'two')
+})
+
+test('the file that goes out keeps the name the user gave it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'informe.pdf')
+  writeFileSync(source, Buffer.from('un informe'))
+
+  const staged = stageOutgoing(source)
+
+  // The name that travels is the name the user gave it, not one with a
+  // timestamp glued to it.
+  assert.equal(basename(staged), 'informe.pdf')
+  assert.equal(readFileSync(staged, 'utf8'), 'un informe')
 })
 
 test('a file that is not there is refused', () => {

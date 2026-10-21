@@ -117,6 +117,22 @@ test('a command without a jid says what is missing', async () => {
   })
 })
 
+test('a file that is not there is refused with a reason, not a crash', async () => {
+  await withDaemon(async (daemon) => {
+    await assert.rejects(
+      runCtl(['send-media', '123@s.whatsapp.net', '/definitely/not/here.png'], { socketPath: daemon.socketPath }),
+      (err) => {
+        assert.equal(err.code, 1)
+        assert.match(err.stderr, /no such file|not found|ENOENT/i)
+        // A stack trace is not an answer a person can act on.
+        assert.equal(/at .*\.js:\d+/.test(err.stderr), false)
+        return true
+      }
+    )
+    assert.equal(daemon.frame, null)
+  })
+})
+
 test('a text message still goes out the way it always did', async () => {
   await withDaemon(async (daemon) => {
     await runCtl(['send', '123@s.whatsapp.net', 'hello', 'there'], { socketPath: daemon.socketPath })
