@@ -576,8 +576,10 @@ Panel {
     recorder: MediaRecorder {
       id: recorder
       outputLocation: ""
-      onStateChanged: {
-        if (state !== MediaRecorder.StoppedState) return
+      // The recorder has no "state" signal: the state is a property, and it
+      // is called recorderState.
+      onRecorderStateChanged: {
+        if (recorderState !== MediaRecorder.StoppedState) return
         if (!root.waitingForRecording) return
         root.waitingForRecording = false
         root.convertRecording()
