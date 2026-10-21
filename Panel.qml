@@ -1166,8 +1166,7 @@ Panel {
                 // loop, which collapses every bubble to a few pixels.
                 readonly property real maxInner: Math.max(Style.space(60), bubbleRow.width * 0.82 - bubbleRow.pad * 2)
                 readonly property bool hasImage: messageRow.modelData.mediaKind !== "audio"
-                  && messageRow.modelData.imagePath
-                  && String(messageRow.modelData.imagePath).length > 0
+                  && String(messageRow.modelData.imagePath || "").length > 0
                 // A voice note that made it to the disk can be played here.
                 readonly property bool hasAudio: messageRow.modelData.mediaKind === "audio"
                   && String(messageRow.modelData.imagePath || "").length > 0
