@@ -1261,7 +1261,9 @@ Panel {
                         color: root.foreground
                         font.family: root.fontFamily
                         font.pixelSize: Style.font.body
-                        anchors.verticalCenter: parent.verticalCenter
+                        // The row is a positioner: it places its children, so
+                        // this one must not ask for anchors as well.
+                        verticalAlignment: Text.AlignVCenter
                       }
                     }
 
