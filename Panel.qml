@@ -639,20 +639,18 @@ Panel {
   }
 
   // The recording, and the microphone it comes from.
+  //
+  // The session has no way of saying that it failed: it only says when the
+  // things plugged into it change. The recorder is the one that knows, and it
+  // says it here.
   CaptureSession {
     id: captureSession
     audioInput: AudioInput {}
-    // A microphone that is absent, busy or refused says so here: without it
-    // the panel would wait for a recording that never starts.
-    onErrorOccurred: function (error, errorString) {
-      root.recording = false
-      root.waitingForRecording = false
-      root.statusLine = "The microphone could not be used: " + errorString
-    }
     recorder: MediaRecorder {
       id: recorder
       outputLocation: ""
       onErrorOccurred: function (error, errorString) {
+        // A microphone that is absent, busy or refused ends up here.
         root.recording = false
         root.waitingForRecording = false
         root.statusLine = "The recording failed: " + errorString
@@ -660,6 +658,13 @@ Panel {
       // The recorder has no "state" signal: the state is a property, and it
       // is called recorderState.
       onRecorderStateChanged: {
+        // The error is sometimes only on the property.
+        if (recorder.error !== MediaRecorder.NoError) {
+          root.recording = false
+          root.waitingForRecording = false
+          root.statusLine = "The recording failed: " + recorder.errorString
+          return
+        }
         if (recorderState !== MediaRecorder.StoppedState) return
         if (!root.waitingForRecording) return
         root.waitingForRecording = false
