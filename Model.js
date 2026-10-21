@@ -99,6 +99,23 @@ function restoredAfterFailure(current, sent) {
   return String(current || "").length === 0 ? String(sent || "") : String(current || "")
 }
 
+// The conversation a picked file belongs to.
+//
+// A file picked for a conversation the user has left does not attach
+// anywhere: it goes with the conversation it was picked for, or nowhere.
+function attachmentChatFor(pickedChat, activeChat) {
+  return pickedChat === activeChat ? pickedChat : ""
+}
+
+// Whether a message can go out now.
+//
+// A message that is still on its way is not sent again: the answer for the
+// first one is what clears the composer, and a second one would deliver the
+// message twice.
+function canSendNow(pending) {
+  return !pending
+}
+
 function chatTitle(chat) {
   if (!chat) return ""
   return chat.name || prettyJid(chat.jid)

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 // evaluated as it would be in the shell.
 const HERE = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(join(HERE, '../../Model.js'), 'utf8').replace(/^\.pragma library\s*$/m, '')
-const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure }`)()
+const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure, attachmentChatFor, canSendNow }`)()
 
 test('a voice note is written the way a phone writes it', () => {
   assert.equal(model.formatDuration(0), '0:00')
@@ -58,4 +58,18 @@ test('a caption comes back when nothing else was typed', () => {
   assert.equal(model.restoredAfterFailure('', 'the caption'), 'the caption')
   // What the user typed is not replaced by the caption that failed.
   assert.equal(model.restoredAfterFailure('new text', 'the caption'), 'new text')
+})
+
+test('a file belongs to the conversation it was picked for', () => {
+  assert.equal(model.attachmentChatFor('a@s.whatsapp.net', 'a@s.whatsapp.net'), 'a@s.whatsapp.net')
+  // The user changed conversation while the file was being copied: the file
+  // goes with the conversation it was picked for, or nowhere.
+  assert.equal(model.attachmentChatFor('a@s.whatsapp.net', 'b@s.whatsapp.net'), '')
+  assert.equal(model.attachmentChatFor('', ''), '')
+})
+
+test('a message that is on its way is not sent twice', () => {
+  assert.equal(model.canSendNow(null), true)
+  assert.equal(model.canSendNow(undefined), true)
+  assert.equal(model.canSendNow({ id: 'r1', jid: 'a@s.whatsapp.net' }), false)
 })
