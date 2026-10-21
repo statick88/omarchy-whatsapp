@@ -37,6 +37,10 @@ Panel {
   // A recording in progress, and where it is being written.
   property bool recording: false
   property string recordingPath: ""
+  // Where a recording is written. The runtime directory belongs to the user
+  // alone and is wiped at logout, which /tmp is not: anything in /tmp can be
+  // read by every user on the machine.
+  readonly property string recordingDir: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
   // True between asking the recorder to stop and the file being finished.
   property bool waitingForRecording: false
   // The staging requests, one at a time: the staging process reads the file
@@ -318,10 +322,11 @@ Panel {
   }
 
   // Staging a file: the name it travels with and whether it is a voice note
-  // belong to the request, not to the last one.
-  function stageFile(path, name, voice) {
+  // belong to the request, not to the last one. A temporary says so too, so
+  // the copy takes it away once it is there.
+  function stageFile(path, name, voice, temporary) {
     root.stagingQueue = root.stagingQueue.concat([
-      { path: path, name: name || "", voice: voice === true }
+      { path: path, name: name || "", voice: voice === true, temporary: temporary === true }
     ])
     root.startStaging()
   }
@@ -332,6 +337,7 @@ Panel {
     stager.source = request.path
     stager.name = request.name
     stager.voice = request.voice
+    stager.temporary = request.temporary
     stager.running = true
   }
 
@@ -350,10 +356,11 @@ Panel {
 
   function startRecording() {
     if (root.recording) return
-    // The name the other end sees is the name of the file, so it is a plain
-    // name and not the name of a temporary. It goes in /tmp, which is always
-    // there, because the recorder does not make directories.
-    var path = "/tmp/omarchy-whatsapp-voice-note.m4a"
+    // Every recording gets a name of its own: there is one panel per monitor,
+    // and two of them recording at the same time must not write over each
+    // other.
+    var path = root.recordingDir + "/omarchy-whatsapp-voice-"
+      + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ".m4a"
     recorder.outputLocation = "file://" + path
     recorder.record()
     root.recording = true
@@ -378,6 +385,13 @@ Panel {
     converter.source = source
     converter.target = target
     converter.running = true
+  }
+
+  // A temporary the panel made goes away with the panel's own hands.
+  function discardRecording(path) {
+    if (!path || path.length === 0) return
+    cleaner.path = path
+    cleaner.running = true
   }
 
   FileDialog {
@@ -590,7 +604,14 @@ Panel {
     property string source: ""
     property string name: ""
     property bool voice: false
-    command: [root.pluginDir + "/bin/omarchy-whatsapp-stage", stager.source, stager.name]
+    // A temporary goes away with its copy: the copy is what travels.
+    property bool temporary: false
+    property var argv: {
+      var list = [root.pluginDir + "/bin/omarchy-whatsapp-stage", stager.source, stager.name]
+      if (stager.temporary) list.push("--remove-source")
+      return list
+    }
+    command: stager.argv
     stdout: SplitParser {
       onRead: function (data) {
         var path = String(data || "").trim()
@@ -615,16 +636,27 @@ Panel {
     command: ["ffmpeg", "-y", "-loglevel", "error", "-i", converter.source, "-c:a", "libopus", "-b:a", "32k", converter.target]
     onExited: function (exitCode) {
       if (exitCode === 0) {
-        root.stageFile(converter.target, "voice-note.opus", true)
+        // The converted note is a temporary: the copy that travels replaces
+        // it. The recording it came from has nothing left to do either.
+        root.stageFile(converter.target, "voice-note.opus", true, true)
+        root.discardRecording(converter.source)
         root.statusLine = ""
         return
       }
       // Without opus the recording is not a voice note: WhatsApp plays a voice
       // note in place and this one would not play at all. It goes as a file,
       // and the person sending it is told that is what happened.
-      root.stageFile(converter.source, "voice-note.m4a", false)
+      root.stageFile(converter.source, "voice-note.m4a", false, true)
       root.statusLine = "The recording could not be turned into a voice note; it goes as a file"
     }
+  }
+
+  // The raw recording is a temporary the panel made, so the panel is the one
+  // that takes it away.
+  Process {
+    id: cleaner
+    property string path: ""
+    command: ["rm", "-f", cleaner.path]
   }
 
   Process {

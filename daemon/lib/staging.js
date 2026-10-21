@@ -12,7 +12,7 @@ import { mediaDir } from './paths.js'
 
 let staged = 0
 
-export function stageOutgoing(source, wanted) {
+export function stageOutgoing(source, wanted, options = {}) {
   // The name that travels is the one the file should arrive with. A recording
   // has no name of its own yet, so its caller says what it should be called.
   const name = wanted ? String(wanted) : basename(String(source || ''))
@@ -26,6 +26,18 @@ export function stageOutgoing(source, wanted) {
   const target = join(mediaDir, 'outgoing', `${Date.now()}-${staged}`, name)
   mkdirSync(dirname(target), { recursive: true, mode: 0o700 })
   copyFileSync(source, target)
+
+  // A recording is a temporary: once the copy is there, the original has
+  // nothing left to do. A file the user picked is not a temporary, so it is
+  // only removed when the caller says so.
+  if (options.removeSource === true) {
+    try {
+      unlinkSync(source)
+    } catch {
+      // Already gone is the outcome that was asked for.
+    }
+  }
+
   return target
 }
 

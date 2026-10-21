@@ -100,3 +100,27 @@ test('removing a file that is already gone is not a failure', () => {
   assert.equal(discardStaged(staged), true)
   assert.equal(discardStaged(staged), true)
 })
+
+test('a temporary is removed once it has been copied', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'recording.m4a')
+  writeFileSync(source, Buffer.from('una grabacion'))
+
+  // A recording is a temporary: the copy is what travels, and the original
+  // has nothing left to do once it is there.
+  const staged = stageOutgoing(source, 'voice-note.opus', { removeSource: true })
+
+  assert.equal(existsSync(staged), true)
+  assert.equal(existsSync(source), false)
+})
+
+test('a file that is not a temporary stays where it is', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  stageOutgoing(source)
+
+  // The user picked this file: it is theirs, and it stays theirs.
+  assert.equal(existsSync(source), true)
+})
