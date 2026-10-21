@@ -91,6 +91,8 @@ plays it.
 | T10 | S1, S4 | inline | 4591e86 | A voice note that was sent shows a play button, not a label. |
 | T11 | S4 | inline | c584dd3 | The staging executable says what it is. |
 | T12 | S4 | inline | bfa2e4b | An acknowledgement only clears what it sent. |
+| T13 | S2, S3 | inline | fd5743c | A file belongs to the conversation it was picked for. |
+| T14 | S4 | inline | 44c845d | A message that is on its way is not sent twice. |
 
 ---
 
@@ -260,3 +262,34 @@ itself. T11.
 
 The correction went in its own worktree, on its own branch
 (`fix/review-corrections`), and was merged into the branch of the feature.
+
+### L9 (2026-10-21)
+
+The second review ran over the corrected branch and found four things, three
+of them the same thing seen from three angles.
+
+**The file went to the conversation the user was in, not the one it was picked
+for.** The conversation was stamped on the attachment when the copy finished,
+not when the file was picked: the copy takes a moment, the user can change
+conversation in the meantime, and the file was sent to the wrong one. The
+recording had the same window, wider, because its copy is made after the
+conversion. The spec says the file goes with the conversation it was picked
+for, and the README says the same.
+
+The fix: the conversation is taken when the file is picked and travels with
+the request, and a file whose conversation the user has left does not attach
+anywhere. T13.
+
+**A message that was still on its way could be sent again.** The composer
+used to be emptied as soon as the message was handed to the daemon, so a
+second `Enter` found it empty and sent nothing. Now the composer waits for
+the answer, so a second `Enter` sent the message again and the person on the
+other end got it twice.
+
+The fix: a message that is still on its way is not sent again, and the answer
+for the first one is what clears the composer. If the daemon never answers,
+the composer is free again after a while and what is in it stays. T14.
+
+Every rule of the two fixes lives in `Model.js`, where node runs it, and each
+one was proved by taking the fix out and watching the test fail for the
+behaviour it covers.
