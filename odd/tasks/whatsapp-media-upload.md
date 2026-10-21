@@ -80,8 +80,8 @@ creas con oddd y validas con rddd
 | T2 | S1, S3 | inline | a646456 | RED first: the integration test could not import `lib/send.js`, then GREEN: 6 tests over a real unix socket with a fake WhatsApp. |
 | T3 | S1, S3 | inline | a646456 | `omarchy-whatsapp-ctl send-media <jid> <file> [caption]`. |
 | T4 | S1, S5 | inline | 720e8ed | The paperclip, the file dialog, the chip, and the caption rule. qmllint clean. |
-| T5 | S3 | inline | - | End to end against the linked account: an image and a document both arrived. |
-| T6 | S2, S4, S5 | inline | pending | README, this document, and the native review. |
+| T5 | S3 | inline | manual | End to end against the linked account: an image and a document both arrived. |
+| T6 | S2, S4, S5 | inline | e174a20 | The README, this document, and the native review of the branch. |
 
 ---
 

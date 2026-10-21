@@ -84,11 +84,16 @@ function filePathFromUrl(url) {
 
 // What an acknowledgement leaves in the composer.
 //
-// The message that was acknowledged takes the text it carried with it, but
-// only while that text is still there: what the user typed while the
-// message was on its way is theirs, and it is not theirs to lose.
+// The message that was acknowledged takes the text it carried with it, and
+// only that text: what the user typed while the message was on its way is
+// the next message, and the text that went out must not be sent again.
 function afterAcknowledge(current, sent) {
-  return current === sent ? "" : current
+  const text = String(current || "")
+  const went = String(sent || "")
+  if (!went) return text
+  if (text === went) return ""
+  if (text.startsWith(went)) return text.slice(went.length)
+  return text
 }
 
 // The text that goes back into the composer when a message could not go out.

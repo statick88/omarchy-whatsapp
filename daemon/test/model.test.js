@@ -48,10 +48,13 @@ test('a url that is not a file is not a path', () => {
 test('what was sent goes, what was typed after it stays', () => {
   // The message that was acknowledged takes the text it carried with it.
   assert.equal(model.afterAcknowledge('hello', 'hello'), '')
-  // What was typed while the message was on its way is the user's, and it
-  // stays in the composer.
-  assert.equal(model.afterAcknowledge('hello there', 'hello'), 'hello there')
+  // The user kept typing while the message was on its way: the text that
+  // went out goes with it, and the rest is the next message. Leaving the
+  // sent text there would deliver it again.
+  assert.equal(model.afterAcknowledge('hello there', 'hello'), ' there')
+  // Text that is not the sent text stays as it is.
   assert.equal(model.afterAcknowledge('something else', 'hello'), 'something else')
+  assert.equal(model.afterAcknowledge('hola', ''), 'hola')
 })
 
 test('a caption comes back when nothing else was typed', () => {

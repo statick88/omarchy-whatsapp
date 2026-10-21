@@ -79,9 +79,9 @@ plays it.
 
 | ID | Specs | Route | Commit | Evidence |
 |----|-------|-------|--------|----------|
-| T1 | S1 | inline | 817e29b | The daemon extracts and downloads a voice note; the panel plays it. |
-| T2 | S2 | inline | 817e29b | The panel records, converts to opus and attaches it. |
-| T3 | S3 | inline | 817e29b | A file dropped on the panel is attached. |
+| T1 | S1 | inline | 817e29b | `daemon/test/media.test.js`: a voice note is media the daemon can fetch, and it is written as an opus file. |
+| T2 | S2 | inline | 817e29b | `daemon/test/sendmedia.test.js`: a recording goes out as a voice note, and the opus it becomes is a valid Ogg. |
+| T3 | S3 | inline | 817e29b | `daemon/test/model.test.js`: a dropped url is the path of the file, and the file goes with the conversation it was dropped in. |
 | T4 | S4 | inline | 58e5511, 97663e5 | The whole suite, qmllint and the live panel. |
 | T5 | S5 | inline | 1106b8d | The README tells the truth about media. |
 | T6 | S3, S4 | inline | 9f787be | A dropped file whose name holds a percent sign is still attached. |
@@ -92,9 +92,9 @@ plays it.
 | T11 | S4 | inline | c584dd3 | The staging executable says what it is. |
 | T12 | S4 | inline | bfa2e4b | An acknowledgement only clears what it sent. |
 | T13 | S2, S3 | inline | fd5743c | A file belongs to the conversation it was picked for. |
-| T14 | S4 | inline | 44c845d | A message that is on its way is not sent twice. |
+| T14 | S4 | inline | 44c845d | `daemon/test/model.test.js`: a message that is on its way is not sent twice, and the daemon still there keeps it there. |
 | T15 | S2 | inline | 749bd2f | The recording is only written where the user alone can read it. |
-| T16 | S4 | inline | 749bd2f | A message on its way stays on its way until the daemon answers. |
+| T16 | S4 | inline | 749bd2f | `daemon/test/model.test.js`: the message stays on its way while the daemon is there, and a failure frees the composer. |
 | T17 | S4 | inline | eda26d1 | A staged copy stays inside the cache. |
 | T18 | S4 | inline | 5b30962 | The daemon answers what actually happened. |
 | T19 | S2, S3 | inline | 373d89e | The file goes with the conversation it was picked for. |
