@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
+import QtMultimedia
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
@@ -31,6 +32,13 @@ Panel {
   // What is waiting for the daemon to accept, and what to put back if it does
   // not: { jid, text, path }.
   property var pendingSend: null
+  // The voice note being played, if any, so its button can show a stop.
+  property string playingMessageId: ""
+  // A recording in progress, and where it is being written.
+  property bool recording: false
+  property string recordingPath: ""
+  // A file dropped on the panel, waiting to be attached.
+  property string droppedPath: ""
   property bool pinToLatest: true
   property bool logoutConfirmOpen: false
   property bool refreshing: false
@@ -262,7 +270,7 @@ Panel {
     }
 
     var sent = false
-    if (path) sent = root.client.sendMedia(root.activeJid, path, text)
+    if (path) sent = root.client.sendMedia(root.activeJid, path, text, root.attachmentIsVoice)
     else sent = root.client.sendMessage(root.activeJid, text)
 
     if (sent) {
@@ -281,6 +289,8 @@ Panel {
   // sits above the composer until it is sent or taken back.
   property string attachmentPath: ""
   property string attachmentName: ""
+  // A recording is a voice note; a file the user picked is a file.
+  property bool attachmentIsVoice: false
   // The conversation the file was picked for.
   property string attachmentChat: ""
 
@@ -288,6 +298,52 @@ Panel {
     root.attachmentPath = ""
     root.attachmentName = ""
     root.attachmentChat = ""
+    root.attachmentIsVoice = false
+  }
+
+  // A file becomes the attachment, whatever route it arrived by: the dialog, a
+  // drop on the panel, or a recording.
+  function attachFile(path) {
+    if (!path || path.length === 0) return
+    root.attachmentPath = path
+    root.attachmentName = path.split("/").pop()
+    root.attachmentChat = root.activeJid
+  }
+
+  // A voice note is played where it sits. A second press stops it.
+  function toggleAudio(message) {
+    if (!message || !message.imagePath) return
+    if (root.playingMessageId === message.id) {
+      player.stop()
+      root.playingMessageId = ""
+      return
+    }
+    player.source = Qt.resolvedUrl("file://" + message.imagePath)
+    player.play()
+    root.playingMessageId = message.id
+  }
+
+  function startRecording() {
+    if (root.recording) return
+    var path = "/tmp/omarchy-whatsapp-voice-" + Date.now() + ".m4a"
+    recorder.outputLocation = "file://" + path
+    recorder.record()
+    root.recording = true
+    root.recordingPath = path
+  }
+
+  // A phone plays a voice note in place, and WhatsApp only takes opus for
+  // that. Qt cannot write opus here, so the recording is converted before it
+  // is attached; without the converter the recording goes as a file.
+  function stopRecording() {
+    if (!root.recording) return
+    recorder.stop()
+    root.recording = false
+    var source = root.recordingPath
+    var target = source.replace(/\.m4a$/, "") + ".opus"
+    converter.source = source
+    converter.target = target
+    converter.running = true
   }
 
   FileDialog {
@@ -456,6 +512,50 @@ Panel {
         }
         root.statusLine = message || "Refresh failed"
       }
+    }
+  }
+
+  // The voice note being played.
+  AudioOutput {
+    id: playbackOutput
+    volume: 0.9
+  }
+
+  MediaPlayer {
+    id: player
+    audioOutput: playbackOutput
+    onStopped: root.playingMessageId = ""
+    onErrorOccurred: function (error, errorString) {
+      root.playingMessageId = ""
+      root.statusLine = "Could not play the voice note: " + errorString
+    }
+  }
+
+  // The recording, and the microphone it comes from.
+  CaptureSession {
+    id: captureSession
+    audioInput: AudioInput {}
+    recorder: MediaRecorder {
+      id: recorder
+      outputLocation: ""
+    }
+  }
+
+  // Opus, because that is what a voice note is.
+  Process {
+    id: converter
+    property string source: ""
+    property string target: ""
+    command: ["ffmpeg", "-y", "-loglevel", "error", "-i", converter.source, "-c:a", "libopus", "-b:a", "32k", converter.target]
+    onExited: function (exitCode) {
+      if (exitCode === 0 && root.recordingPath.length > 0) {
+        root.attachFile(converter.target)
+      } else {
+        // Without a converter the recording is still worth sending, as a file.
+        root.attachFile(converter.source)
+      }
+      root.attachmentIsVoice = true
+      root.statusLine = ""
     }
   }
 
@@ -993,12 +1093,18 @@ Panel {
                 // width depend on content that depends on the bubble: a binding
                 // loop, which collapses every bubble to a few pixels.
                 readonly property real maxInner: Math.max(Style.space(60), bubbleRow.width * 0.82 - bubbleRow.pad * 2)
-                readonly property bool hasImage: messageRow.modelData.imagePath
+                readonly property bool hasImage: messageRow.modelData.mediaKind !== "audio"
+                  && messageRow.modelData.imagePath
                   && String(messageRow.modelData.imagePath).length > 0
+                // A voice note that made it to the disk can be played here.
+                readonly property bool hasAudio: messageRow.modelData.mediaKind === "audio"
+                  && String(messageRow.modelData.imagePath || "").length > 0
                 readonly property bool showBody: {
                   var text = messageRow.modelData.text || ""
                   if (!text.length) return false
                   if (bubbleRow.hasImage && Model.isPhotoPlaceholder(text)) return false
+                  // A voice note shows its button and its length instead.
+                  if (bubbleRow.hasAudio) return false
                   return true
                 }
                 readonly property bool showSender: !messageRow.modelData.fromMe
@@ -1024,6 +1130,7 @@ Panel {
                     width: Math.max(
                       bubbleRow.showSender ? senderLabel.width : 0,
                       bubbleRow.hasImage ? photo.width : 0,
+                      bubbleRow.hasAudio ? audioRow.width : 0,
                       bodyLabel.visible ? bodyLabel.width : 0,
                       Math.min(metaLabel.implicitWidth, bubbleRow.maxInner))
 
@@ -1074,6 +1181,49 @@ Panel {
                             color: "#ffffff"
                           }
                         }
+                      }
+                    }
+
+                    // A voice note: a button to play it, and how long it is.
+                    Row {
+                      id: audioRow
+                      visible: bubbleRow.hasAudio
+                      spacing: Style.space(6)
+                      height: Math.max(audioButton.height, audioLength.implicitHeight)
+
+                      Rectangle {
+                        id: audioButton
+                        width: Style.space(22)
+                        height: width
+                        radius: width / 2
+                        color: root.playingMessageId === messageRow.modelData.id
+                          ? (root.bar ? root.bar.urgent : Color.accent)
+                          : "transparent"
+                        border.color: root.foreground
+                        border.width: 1
+
+                        Text {
+                          anchors.centerIn: parent
+                          text: root.playingMessageId === messageRow.modelData.id ? "\uf04d" : "\uf04b"
+                          color: root.playingMessageId === messageRow.modelData.id
+                            ? (root.bar ? root.bar.barForeground : Color.background)
+                            : root.foreground
+                          font.family: root.fontFamily
+                          font.pixelSize: Style.font.caption
+                        }
+
+                        TapHandler {
+                          onTapped: root.toggleAudio(messageRow.modelData)
+                        }
+                      }
+
+                      Text {
+                        id: audioLength
+                        text: Model.formatDuration(messageRow.modelData.mediaSeconds)
+                        color: root.foreground
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.body
+                        anchors.verticalCenter: parent.verticalCenter
                       }
                     }
 
@@ -1201,7 +1351,7 @@ Panel {
 
             PanelActionButton {
               id: attachButton
-              anchors.right: sendButton.left
+              anchors.right: recordButton.left
               anchors.rightMargin: Style.space(4)
               anchors.verticalCenter: parent.verticalCenter
               iconText: "\uf0c6"
@@ -1210,6 +1360,24 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               onClicked: fileDialog.open()
+            }
+
+            // Record a voice note, right here. A second press stops it and
+            // attaches what was recorded.
+            PanelActionButton {
+              id: recordButton
+              anchors.right: sendButton.left
+              anchors.rightMargin: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              iconText: root.recording ? "\uf04d" : "\uf130"
+              tooltipText: root.recording ? "Stop recording" : "Record a voice note"
+              enabled: root.linked
+              foreground: root.recording ? (root.bar ? root.bar.urgent : Color.accent) : root.foreground
+              fontFamily: root.fontFamily
+              onClicked: {
+                if (root.recording) root.stopRecording()
+                else root.startRecording()
+              }
             }
 
             PanelActionButton {
@@ -1228,6 +1396,30 @@ Panel {
       }
 
       // ── List picker (l) ────────────────────────────────────────────────
+      // A screenshot, a picture, a file: dropped anywhere on the panel, it
+      // becomes the attachment. It sits beside the content rather than inside
+      // it, because a positioner refuses anchors on its children.
+      DropArea {
+        id: dropArea
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onDropped: function (drop) {
+          if (!drop.hasUrls || drop.urls.length === 0) return
+          var url = String(drop.urls[0])
+          if (url.indexOf("file://") !== 0) return
+          root.attachFile(decodeURIComponent(url.replace(/^file:\/\//, "")))
+        }
+
+        Rectangle {
+          anchors.fill: parent
+          visible: dropArea.containsDrag
+          color: Qt.rgba(root.bar ? root.bar.urgent : Color.accent, 0.08)
+          border.color: root.bar ? root.bar.urgent : Color.accent
+          border.width: 2
+          radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(6)
+        }
+      }
+
       Rectangle {
         id: listPicker
         visible: root.listPickerOpen

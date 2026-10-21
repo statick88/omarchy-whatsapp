@@ -96,6 +96,14 @@ function chatPreview(chat) {
 // Baileys status enum: 1 pending, 2 server ack, 3 delivered, 4 read, 5 played.
 // Two nf-fa-check glyphs, not nf-fa-check-double: that codepoint is a copy
 // icon in a lot of Nerd Fonts, so "delivered" was rendering as one tick.
+// How long a voice note is, the way a phone writes it.
+function formatDuration(seconds) {
+  var total = Math.max(0, Math.floor(Number(seconds) || 0))
+  var minutes = Math.floor(total / 60)
+  var rest = total % 60
+  return minutes + ":" + (rest < 10 ? "0" + rest : String(rest))
+}
+
 function statusGlyph(status) {
   switch (status | 0) {
     case 0:

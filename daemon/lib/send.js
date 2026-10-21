@@ -17,7 +17,9 @@ export async function handleSendMedia(payload, reply, deps) {
 
   // Refuses a file that is not there, and one WhatsApp would not take.
   const upload = prepareUpload(path)
-  const message = mediaMessageFor(upload, payload.caption)
+  // A recording is played in place, the way a voice note is; a file the user
+  // picked is a file.
+  const message = mediaMessageFor(upload, payload.caption, { ptt: payload.ptt === true })
 
   const routingJid = store.routingJid(rawJid) || rawJid
   const sent = await sock.sendMessage(routingJid, message, {})

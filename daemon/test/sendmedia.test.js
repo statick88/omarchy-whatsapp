@@ -152,6 +152,36 @@ test('the sent message is handed on so the panel can show it', async () => {
   )
 })
 
+test('a recording is sent as a voice note, and a file is not', async () => {
+  const path = tempFile('voice.opus')
+  const sent = []
+  const sock = {
+    async sendMessage(jid, content) {
+      sent.push(content)
+      return { key: { id: 'MSG4' }, message: { audioMessage: {} }, status: 1 }
+    }
+  }
+
+  await withBus(
+    (payload, reply) => handleSendMedia(payload, reply, {
+      sock,
+      connection: 'open',
+      store: { routingJid: (jid) => jid },
+      deliver: () => {}
+    }),
+    async (socketPath) => {
+      const socket = await connect(socketPath)
+      const answer = readFrame(socket)
+      socket.write(JSON.stringify({ t: 'sendMedia', jid: '123@s.whatsapp.net', path, ptt: true }) + '\n')
+      await answer
+      socket.destroy()
+
+      assert.equal(sent[0].ptt, true)
+      assert.equal(sent[0].audio.url, path)
+    }
+  )
+})
+
 test('a request without a file is refused and says why', async () => {
   await withBus(
     (payload, reply) => handleSendMedia(payload, reply, {

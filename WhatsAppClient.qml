@@ -137,9 +137,11 @@ Item {
 
   // A file the user picked in the panel. The daemon reads it from disk and
   // sends it as an image, a video or a document, depending on what it is.
-  function sendMedia(jid, path, caption) {
+  function sendMedia(jid, path, caption, ptt) {
     if (!jid || !path) return false
-    return request({ t: "sendMedia", jid: jid, path: path, caption: caption || "" })
+    var payload = { t: "sendMedia", jid: jid, path: path, caption: caption || "" }
+    if (ptt === true) payload.ptt = true
+    return request(payload)
   }
 
   property bool setupTried: false

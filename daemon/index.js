@@ -19,7 +19,7 @@ import { Store, normalizeJid, pinRank } from './lib/store.js'
 import { scanAppState } from './lib/appstate.js'
 import { Notifier } from './lib/notify.js'
 import { Bus } from './lib/server.js'
-import { extractImage, isGroupJid, isIgnorableChat, isPhotoPlaceholder, isSilent, messageText, messageType, prettyJid } from './lib/message.js'
+import { extractMedia, isGroupJid, isIgnorableChat, isPhotoPlaceholder, isSilent, messageText, messageType, prettyJid } from './lib/message.js'
 import { existingMediaPath, MediaCache } from './lib/media.js'
 import { handleSendMedia } from './lib/send.js'
 import {
@@ -370,13 +370,13 @@ function applyMessageStatus(jid, id, status) {
 
 function flatten(chatJid, message) {
   const ts = toTs(message.messageTimestamp)
-  const image = extractImage(message.message)
+  const media = extractMedia(message.message)
   const id = message.key?.id || `${ts}-${Math.random().toString(36).slice(2, 8)}`
   const flat = {
     id,
     ts,
     fromMe: !!message.key?.fromMe,
-    text: image ? (image.caption || messageText(message.message)) : messageText(message.message),
+    text: media ? (media.caption || messageText(message.message)) : messageText(message.message),
     type: messageType(message.message),
     senderName: senderNameFor(chatJid, message),
     senderJid: message.key?.participant ? jidNormalizedUser(message.key.participant) : '',
@@ -388,9 +388,13 @@ function flatten(chatJid, message) {
       participant: message.key?.participant || undefined
     }
   }
-  if (image) {
-    const { caption, ...payload } = image
+  if (media) {
+    const { caption, ...payload } = media
     flat.media = payload
+    // What the panel needs to know to draw it: a voice note plays, a picture
+    // shows, and the length of a voice note is on the label.
+    flat.mediaKind = payload.kind
+    flat.mediaSeconds = payload.seconds || 0
     flat.imagePath = existingMediaPath({ id, media: payload, imagePath: '' })
   }
   return flat

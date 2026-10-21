@@ -31,6 +31,11 @@ test('a video goes out as a video', () => {
   assert.equal(mediaKindFor('video/3gpp'), 'video')
 })
 
+test('a voice note goes out as a voice note', () => {
+  assert.equal(mediaKindFor('audio/ogg; codecs=opus'), 'audio')
+  assert.equal(mediaKindFor('audio/mpeg'), 'audio')
+})
+
 test('everything else goes out as a document', () => {
   assert.equal(mediaKindFor('application/pdf'), 'document')
   assert.equal(mediaKindFor('text/plain'), 'document')
@@ -113,6 +118,23 @@ test('the document payload carries the name, which is what WhatsApp shows for a 
     fileName: 'notes.pdf',
     mimetype: 'application/pdf'
   })
+})
+
+test('the voice note payload carries the path, the mime type and the name', () => {
+  const upload = { path: '/tmp/voice.opus', kind: 'audio', mimetype: 'audio/ogg; codecs=opus', fileName: 'voice.opus', size: 10 }
+  const message = mediaMessageFor(upload)
+  assert.deepEqual(message, {
+    audio: { url: '/tmp/voice.opus' },
+    fileName: 'voice.opus',
+    mimetype: 'audio/ogg; codecs=opus'
+  })
+})
+
+test('a recording is marked as a voice note, and a music file is not', () => {
+  const upload = { path: '/tmp/voice.opus', kind: 'audio', mimetype: 'audio/ogg; codecs=opus', fileName: 'voice.opus', size: 10 }
+  assert.equal('ptt' in mediaMessageFor(upload, '', { ptt: true }), true)
+  assert.equal('ptt' in mediaMessageFor(upload, '', { ptt: false }), false)
+  assert.equal('ptt' in mediaMessageFor(upload), false)
 })
 
 test('the video payload carries the path and the mime type', () => {

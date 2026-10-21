@@ -30,6 +30,11 @@ const MIME_TYPES = {
   '.zip': 'application/zip',
   '.gz': 'application/gzip',
   '.tar': 'application/x-tar',
+  '.opus': 'audio/ogg; codecs=opus',
+  '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
   '.odt': 'application/vnd.oasis.opendocument.text',
   '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -45,6 +50,9 @@ export function mediaKindFor(mimetype) {
   const type = String(mimetype || '').toLowerCase()
   if (type.startsWith('image/')) return 'image'
   if (type.startsWith('video/')) return 'video'
+  // A voice note stays a voice note: WhatsApp plays it in place, and a
+  // document would arrive as a file to download.
+  if (type.startsWith('audio/')) return 'audio'
   return 'document'
 }
 
@@ -107,13 +115,20 @@ export function prepareUpload(path) {
 // reads it from there when it builds the WhatsApp message. The file name does
 // too, but only a document carries one: a picture is a picture, and a video
 // is a video, while a document arrives as a file with a name of its own.
-export function mediaMessageFor(upload, caption) {
+export function mediaMessageFor(upload, caption, options = {}) {
   const message = {}
   const media = { url: upload.path }
 
   if (upload.kind === 'image') {
     message.image = media
     message.mimetype = upload.mimetype
+  } else if (upload.kind === 'audio') {
+    message.audio = media
+    message.fileName = upload.fileName
+    message.mimetype = upload.mimetype
+    // A recording is played in place, the way a voice note is; a music file is
+    // not. Only the sender knows which one it is.
+    if (options.ptt === true) message.ptt = true
   } else if (upload.kind === 'video') {
     message.video = media
     message.mimetype = upload.mimetype
