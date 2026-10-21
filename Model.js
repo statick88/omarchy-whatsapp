@@ -125,11 +125,11 @@ function recordingDirectory(runtimeDir) {
   return String(runtimeDir || "")
 }
 
-// Whether a message that has not been answered yet is still on its way.
+// Whether the daemon is still there.
 //
-// The daemon is still there: the upload is probably still running, and the
-// message is not sent again. The daemon is gone: it did not go out.
-function messageStillInFlight(linkUp) {
+// The daemon is: the upload is probably still running, and the message is
+// not sent again. The daemon is gone: the message did not go out.
+function daemonStillThere(linkUp) {
   return linkUp === true
 }
 

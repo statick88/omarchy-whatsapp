@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 // evaluated as it would be in the shell.
 const HERE = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(join(HERE, '../../Model.js'), 'utf8').replace(/^\.pragma library\s*$/m, '')
-const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure, attachmentChatFor, canSendNow, recordingDirectory, messageStillInFlight, failureFreesSend }`)()
+const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure, attachmentChatFor, canSendNow, recordingDirectory, daemonStillThere, failureFreesSend }`)()
 
 test('a voice note is written the way a phone writes it', () => {
   assert.equal(model.formatDuration(0), '0:00')
@@ -83,11 +83,11 @@ test('a recording is only written where the user alone can read it', () => {
   assert.equal(model.recordingDirectory(undefined), '')
 })
 
-test('a message the daemon still holds is still on its way', () => {
+test('the daemon is still there, or it is not', () => {
   // The daemon is there: the upload is probably still running.
-  assert.equal(model.messageStillInFlight(true), true)
+  assert.equal(model.daemonStillThere(true), true)
   // The daemon is gone: the message did not go out.
-  assert.equal(model.messageStillInFlight(false), false)
+  assert.equal(model.daemonStillThere(false), false)
 })
 
 test('a failure frees the composer only when it is about the message', () => {

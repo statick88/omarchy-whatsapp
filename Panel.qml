@@ -50,8 +50,6 @@ Panel {
   // The staging requests, one at a time: the staging process reads the file
   // and the name it is given, so two requests in flight would mix them up.
   property var stagingQueue: []
-  // A file dropped on the panel, waiting to be attached.
-  property string droppedPath: ""
   // The colour the drop surface tints itself with.
   readonly property color dropTint: bar ? bar.urgent : Color.accent
   property bool pinToLatest: true
@@ -279,6 +277,13 @@ Panel {
     var path = root.attachmentPath
     // A file on its own is a message too: the text is its caption.
     if ((!text || !text.trim().length) && !path) return
+    // A file goes with the conversation it was picked for, and the
+    // conversation can change without the panel choosing it: the daemon can
+    // point the panel at another chat. So it is checked again here.
+    if (path && Model.attachmentChatFor(root.attachmentChat, root.activeJid).length === 0) {
+      root.statusLine = "The file goes with another conversation"
+      return
+    }
     // A message that is still on its way is not sent again: the answer for
     // the first one is what clears the composer, and a second one would
     // deliver the message twice.
@@ -631,9 +636,21 @@ Panel {
   CaptureSession {
     id: captureSession
     audioInput: AudioInput {}
+    // A microphone that is absent, busy or refused says so here: without it
+    // the panel would wait for a recording that never starts.
+    onErrorOccurred: function (error, errorString) {
+      root.recording = false
+      root.waitingForRecording = false
+      root.statusLine = "The microphone could not be used: " + errorString
+    }
     recorder: MediaRecorder {
       id: recorder
       outputLocation: ""
+      onErrorOccurred: function (error, errorString) {
+        root.recording = false
+        root.waitingForRecording = false
+        root.statusLine = "The recording failed: " + errorString
+      }
       // The recorder has no "state" signal: the state is a property, and it
       // is called recorderState.
       onRecorderStateChanged: {
@@ -746,10 +763,12 @@ Panel {
   // again.
   Timer {
     id: sendWatchdog
+    // How often the panel says the message is still on its way. It is not a
+    // deadline: nothing is given up on when it passes.
     interval: 30000
     repeat: false
     onTriggered: {
-      if (root.client && Model.messageStillInFlight(root.client.linkUp)) {
+      if (root.client && Model.daemonStillThere(root.client.linkUp)) {
         // The daemon is still there: the upload is probably still running.
         root.statusLine = "The message is still on its way"
         sendWatchdog.restart()
