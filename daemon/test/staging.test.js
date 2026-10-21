@@ -1,13 +1,25 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 import { discardStaged, stageOutgoing } from '../lib/staging.js'
 
 // The daemon cannot read the user's /tmp, so a file that is going out is
 // copied into the directory both of them can see.
+
+// The panel has no other way to attach a file: it runs this executable.
+const HERE = dirname(new URL(import.meta.url).pathname)
+const STAGER = join(HERE, '..', '..', 'bin', 'omarchy-whatsapp-stage.mjs')
+
+function runStage(args, env = {}) {
+  return execFileSync(STAGER, args, {
+    encoding: 'utf8',
+    env: { ...process.env, ...env }
+  }).trim()
+}
 
 test('a file is staged where the daemon can read it', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
@@ -123,4 +135,41 @@ test('a file that is not a temporary stays where it is', () => {
 
   // The user picked this file: it is theirs, and it stays theirs.
   assert.equal(existsSync(source), true)
+})
+
+test('the executable the panel runs stages a file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  const staged = runStage([source, 'photo.png'])
+
+  assert.match(staged, /photo\.png$/)
+  assert.equal(readFileSync(staged, 'utf8'), 'a photo')
+})
+
+test('the executable does not need the runtime to guess the module type', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  // Node 20 has no module detection at all, so a file that relies on it
+  // breaks there: the executable says what it is.
+  const staged = runStage([source, 'photo.png'], {
+    NODE_OPTIONS: '--no-experimental-detect-module'
+  })
+
+  assert.match(staged, /photo\.png$/)
+})
+
+test('the executable takes a temporary away with its copy', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'recording.m4a')
+  writeFileSync(source, Buffer.from('una grabacion'))
+
+  const staged = runStage([source, 'voice-note.opus', '--remove-source'])
+
+  assert.match(staged, /voice-note\.opus$/)
+  assert.equal(existsSync(staged), true)
+  assert.equal(existsSync(source), false)
 })

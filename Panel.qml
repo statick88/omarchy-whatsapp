@@ -607,7 +607,7 @@ Panel {
     // A temporary goes away with its copy: the copy is what travels.
     property bool temporary: false
     property var argv: {
-      var list = [root.pluginDir + "/bin/omarchy-whatsapp-stage", stager.source, stager.name]
+      var list = [root.pluginDir + "/bin/omarchy-whatsapp-stage.mjs", stager.source, stager.name]
       if (stager.temporary) list.push("--remove-source")
       return list
     }
