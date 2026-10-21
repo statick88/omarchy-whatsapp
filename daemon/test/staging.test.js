@@ -3,9 +3,11 @@ import test from 'node:test'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, sep } from 'node:path'
 
 import { discardStaged, stageOutgoing } from '../lib/staging.js'
+import { MAX_UPLOAD_BYTES } from '../lib/outgoing.js'
+import { mediaDir } from '../lib/paths.js'
 
 // The daemon cannot read the user's /tmp, so a file that is going out is
 // copied into the directory both of them can see.
@@ -113,6 +115,17 @@ test('removing a file that is already gone is not a failure', () => {
   assert.equal(discardStaged(staged), true)
 })
 
+test('a path that walks out of the cache is never removed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const outside = join(dir, 'keep.txt')
+  writeFileSync(outside, Buffer.from('not for the cache'))
+
+  // The path starts inside the cache and steps back out of it.
+  const sneaky = join(mediaDir, 'outgoing', '..', '..', '..', '..', '..', '..', outside)
+  assert.equal(discardStaged(sneaky), false)
+  assert.equal(existsSync(outside), true)
+})
+
 test('a temporary is removed once it has been copied', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
   const source = join(dir, 'recording.m4a')
@@ -135,6 +148,42 @@ test('a file that is not a temporary stays where it is', () => {
 
   // The user picked this file: it is theirs, and it stays theirs.
   assert.equal(existsSync(source), true)
+})
+
+test('a name with a path in it stays a name', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  // The name is what the copy on disk is called, so it can never name a
+  // place outside the cache.
+  const staged = stageOutgoing(source, '../../elsewhere/passwd')
+
+  assert.equal(basename(staged), 'passwd')
+  assert.equal(dirname(dirname(staged)).endsWith(`${sep}outgoing`), true)
+})
+
+test('the copy lands in a directory of its own', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  const staged = stageOutgoing(source)
+
+  // The stager runs as its own process for every file, so the directory has
+  // to carry something that differs between two processes: two panels
+  // staging at the same moment would otherwise land on each other.
+  assert.ok(staged.includes(String(process.pid)))
+})
+
+test('a file that is too large is not copied', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'huge.bin')
+  writeFileSync(source, Buffer.alloc(MAX_UPLOAD_BYTES + 1))
+
+  // The copy is made before the daemon looks at it, so the size is checked
+  // here too.
+  assert.throws(() => stageOutgoing(source), /too large/i)
 })
 
 test('the executable the panel runs stages a file', () => {
