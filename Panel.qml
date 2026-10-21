@@ -386,14 +386,10 @@ Panel {
     onAccepted: {
       var url = String(selectedFile || "")
       if (url.length === 0) return
-      // A name with a stray percent sign is not a broken escape sequence, so
-      // the decoder must not be allowed to throw here.
-      var path = ""
-      try {
-        path = decodeURIComponent(url.replace(/^file:\/\//, ""))
-      } catch (err) {
-        path = url.replace(/^file:\/\//, "")
-      }
+      // The decoding lives in the model, where it is tested: a name with a
+      // stray percent sign must not take the dialog down with it.
+      var path = Model.filePathFromUrl(url)
+      if (path.length === 0) return
       root.stageFile(path, "", false)
     }
   }
@@ -1478,9 +1474,11 @@ Panel {
         keys: ["text/uri-list"]
         onDropped: function (drop) {
           if (!drop.hasUrls || drop.urls.length === 0) return
-          var url = String(drop.urls[0])
-          if (url.indexOf("file://") !== 0) return
-          root.stageFile(decodeURIComponent(url.replace(/^file:\/\//, "")), "", false)
+          // The decoding lives in the model, where it is tested: a name with a
+          // stray percent sign must not take the panel down with it.
+          var path = Model.filePathFromUrl(String(drop.urls[0]))
+          if (path.length === 0) return
+          root.stageFile(path, "", false)
         }
 
         Rectangle {

@@ -66,6 +66,22 @@ function isPhotoPlaceholder(text) {
   return /^[\uf03e\uf118]?\s*(Photo|Sticker)?$/i.test(String(text || "").trim())
 }
 
+// The path of a file the user picked or dropped.
+//
+// A name with a stray percent sign is not a broken escape sequence, so the
+// decoder must not be allowed to throw: a file called "100%.png" is a real
+// file and has to travel as itself.
+function filePathFromUrl(url) {
+  var value = String(url || "")
+  if (value.indexOf("file://") !== 0) return ""
+  var raw = value.slice("file://".length)
+  try {
+    return decodeURIComponent(raw)
+  } catch (err) {
+    return raw
+  }
+}
+
 function chatTitle(chat) {
   if (!chat) return ""
   return chat.name || prettyJid(chat.jid)
