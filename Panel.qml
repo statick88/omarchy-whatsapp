@@ -298,6 +298,10 @@ Panel {
     else sent = root.client.sendMessage(root.activeJid, text)
 
     if (sent) {
+      // The composer lets go of the text as soon as the message is handed
+      // over: what the user types while it is on its way is the next
+      // message, and the text that went out must not go out again with it.
+      composer.text = ""
       // The composer keeps what was typed until the daemon says the message
       // went out: a file it refuses must not cost the caption either.
       root.pendingSend = { id: sent, jid: root.activeJid, text: text, path: path }
@@ -332,7 +336,7 @@ Panel {
   // The conversation it was picked for comes with it: the user can pick a
   // file and change conversation while it is being copied, and the file goes
   // with the conversation it was picked for, or nowhere.
-  function attachFile(path, chat) {
+  function attachFile(path, chat, voice) {
     if (!path || path.length === 0) return
     var belongs = Model.attachmentChatFor(chat, root.activeJid)
     if (belongs.length === 0) {
@@ -342,6 +346,9 @@ Panel {
     root.attachmentPath = path
     root.attachmentName = path.split("/").pop()
     root.attachmentChat = belongs
+    // A recording is a voice note; a file the user picked is a file. It
+    // changes with the attachment, never apart from it.
+    root.attachmentIsVoice = voice === true
   }
 
   // Staging a file: the name it travels with, whether it is a voice note and
@@ -359,7 +366,6 @@ Panel {
     var request = root.stagingQueue[0]
     stager.source = request.path
     stager.name = request.name
-    stager.voice = request.voice
     stager.temporary = request.temporary
     stager.running = true
   }
@@ -561,9 +567,9 @@ Panel {
       // Only the message that was acknowledged: an answer for another one
       // says nothing about what is in the composer now.
       if (!root.pendingSend || root.pendingSend.id !== id) return
-      // And only what still belongs to it: text typed after the send and a
-      // file picked after it are the user's, and they stay.
-      composer.text = Model.afterAcknowledge(composer.text, root.pendingSend.text)
+      // The text went with the message as soon as it was handed over, so
+      // what is in the composer now is the next message and it stays. Only
+      // the file that went out goes with it, and only if it is still there.
       if (root.attachmentPath === root.pendingSend.path) root.clearAttachment()
       root.releasePendingSend()
     }
@@ -668,7 +674,6 @@ Panel {
     id: stager
     property string source: ""
     property string name: ""
-    property bool voice: false
     // A temporary goes away with its copy: the copy is what travels.
     property bool temporary: false
     property var argv: {
@@ -682,8 +687,7 @@ Panel {
         var path = String(data || "").trim()
         var request = root.stagingQueue.length > 0 ? root.stagingQueue[0] : null
         if (path.length === 0 || !request) return
-        root.attachFile(path, request.chat)
-        root.attachmentIsVoice = request.voice
+        root.attachFile(path, request.chat, request.voice)
       }
     }
     onExited: function (exitCode) {

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 // evaluated as it would be in the shell.
 const HERE = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(join(HERE, '../../Model.js'), 'utf8').replace(/^\.pragma library\s*$/m, '')
-const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure, attachmentChatFor, canSendNow, recordingDirectory, daemonStillThere, failureFreesSend }`)()
+const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, restoredAfterFailure, attachmentChatFor, canSendNow, recordingDirectory, daemonStillThere, failureFreesSend }`)()
 
 test('a voice note is written the way a phone writes it', () => {
   assert.equal(model.formatDuration(0), '0:00')
@@ -43,18 +43,6 @@ test('a url that is not a file is not a path', () => {
   assert.equal(model.filePathFromUrl(''), '')
   assert.equal(model.filePathFromUrl('https://example.com/photo.png'), '')
   assert.equal(model.filePathFromUrl(undefined), '')
-})
-
-test('what was sent goes, what was typed after it stays', () => {
-  // The message that was acknowledged takes the text it carried with it.
-  assert.equal(model.afterAcknowledge('hello', 'hello'), '')
-  // The user kept typing while the message was on its way: the text that
-  // went out goes with it, and the rest is the next message. Leaving the
-  // sent text there would deliver it again.
-  assert.equal(model.afterAcknowledge('hello there', 'hello'), ' there')
-  // Text that is not the sent text stays as it is.
-  assert.equal(model.afterAcknowledge('something else', 'hello'), 'something else')
-  assert.equal(model.afterAcknowledge('hola', ''), 'hola')
 })
 
 test('a caption comes back when nothing else was typed', () => {
