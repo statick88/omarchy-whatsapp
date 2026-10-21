@@ -93,6 +93,8 @@ plays it.
 | T12 | S4 | inline | bfa2e4b | An acknowledgement only clears what it sent. |
 | T13 | S2, S3 | inline | fd5743c | A file belongs to the conversation it was picked for. |
 | T14 | S4 | inline | 44c845d | A message that is on its way is not sent twice. |
+| T15 | S2 | inline | 749bd2f | The recording is only written where the user alone can read it. |
+| T16 | S4 | inline | 749bd2f | A message on its way stays on its way until the daemon answers. |
 
 ---
 
@@ -293,3 +295,31 @@ the composer is free again after a while and what is in it stays. T14.
 Every rule of the two fixes lives in `Model.js`, where node runs it, and each
 one was proved by taking the fix out and watching the test fail for the
 behaviour it covers.
+
+### L10 (2026-10-21)
+
+The third review found three more things, and the refuter could not settle a
+fourth.
+
+**The recording fell back to a directory everyone can read.** The runtime
+directory is where a recording belongs, but the code fell back to `/tmp` when
+it was not there, and `/tmp` is readable by every user on the machine. The
+comment right above it said so. There is no fallback now: without a private
+directory there is no recording, and the panel says so. T15.
+
+**A slow upload became a second message.** The wait for the answer had a
+deadline of thirty seconds, and a file of sixteen megabytes on a slow
+connection takes longer than that. The deadline declared the message not
+sent, freed the composer and said so, so the user sent it again and the
+person on the other end got two copies. The message stays on its way until
+the answer arrives; only the daemon going away frees the composer, and the
+panel hears that when the socket drops. T16.
+
+**A failure without an id never freed the composer**, so a refused message
+held it for the whole deadline. The refuter could not settle it, because the
+code that builds the error frame was not in the evidence it could see: that
+frame does carry the id of the request, and a failure without one is about
+the message that is the only one on its way. T16.
+
+The three rules went in `Model.js` too, and each was proved by taking the fix
+out and watching the test fail for the behaviour it covers.
