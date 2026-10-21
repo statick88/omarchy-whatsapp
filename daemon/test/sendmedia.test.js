@@ -5,9 +5,14 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { Bus } from '../lib/server.js'
-import { handleSendMedia } from '../lib/send.js'
-import { discardStaged, stageOutgoing } from '../lib/staging.js'
+// The media cache of the tests is a temporary directory: the tests do not
+// write in the cache of the user.
+const mediaHome = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-media-'))
+process.env.OMARCHY_WHATSAPP_MEDIA = mediaHome
+
+const { Bus } = await import('../lib/server.js')
+const { handleSendMedia } = await import('../lib/send.js')
+const { discardStaged, stageOutgoing } = await import('../lib/staging.js')
 
 // The daemon is one process and the panel is another, and the only thing
 // between them is a newline-delimited JSON frame on a unix socket. So the

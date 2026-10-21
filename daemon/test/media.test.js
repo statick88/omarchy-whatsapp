@@ -1,9 +1,17 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
+import { mkdtempSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { extractMedia, isPhotoPlaceholder } from '../lib/message.js'
-import { mediaPathFor, publicMessage } from '../lib/media.js'
-import { unlinkSync, writeFileSync } from 'node:fs'
+
+// The media cache of the tests is a temporary directory: the tests do not
+// write in the cache of the user.
+const mediaHome = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-media-'))
+process.env.OMARCHY_WHATSAPP_MEDIA = mediaHome
+
+const { mediaPathFor, publicMessage } = await import('../lib/media.js')
 
 // A voice note is media too: the daemon can fetch it and the panel can play
 // it. Until this existed, a voice note was a label and nothing else.

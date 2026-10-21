@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, sep } from 'node:path'
 
-import { discardStaged, stageOutgoing, sweepStaged } from '../lib/staging.js'
-import { MAX_UPLOAD_BYTES } from '../lib/outgoing.js'
-import { mediaDir } from '../lib/paths.js'
+// The media cache of the tests is a temporary directory: the tests do not
+// write in the cache of the user, and they do not sweep it either.
+const mediaHome = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-media-'))
+process.env.OMARCHY_WHATSAPP_MEDIA = mediaHome
+
+const { discardStaged, stageOutgoing, sweepStaged } = await import('../lib/staging.js')
+const { MAX_UPLOAD_BYTES } = await import('../lib/outgoing.js')
+const { mediaDir } = await import('../lib/paths.js')
 
 // The daemon cannot read the user's /tmp, so a file that is going out is
 // copied into the directory both of them can see.
@@ -230,9 +235,11 @@ test('the copies that were never sent are swept', () => {
 
   const staged = stageOutgoing(source)
   // A file the user took back, or a send that never happened, leaves a copy
-  // behind. It is swept after a while.
-  const swept = sweepStaged(0)
+  // behind. It is swept once it is old enough.
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000)
+  utimesSync(dirname(staged), old, old)
 
-  assert.ok(swept >= 1)
+  sweepStaged()
+
   assert.equal(existsSync(staged), false)
 })
