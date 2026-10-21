@@ -5,6 +5,7 @@
 import net from 'node:net'
 import { resolve } from 'node:path'
 import { socketPath } from './lib/paths.js'
+import { stageOutgoing } from './lib/staging.js'
 
 const [command, ...args] = process.argv.slice(2)
 
@@ -53,8 +54,10 @@ function buildRequest() {
         jid: args[0],
         // The daemon is another process with its own working directory, so a
         // relative path would name a file over there instead of the one named
-        // here. It is resolved before it crosses the socket.
-        path: resolve(args[1]),
+        // here. It is resolved before it crosses the socket, and then copied
+        // where the daemon can read it: it runs with a private /tmp and would
+        // not see a file the user picked in their own shell.
+        path: stageOutgoing(resolve(args[1])),
         caption: args.slice(2).join(' ')
       }
     case 'read':

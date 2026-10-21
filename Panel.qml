@@ -360,9 +360,9 @@ Panel {
       } catch (err) {
         path = url.replace(/^file:\/\//, "")
       }
-      root.attachmentPath = path
-      root.attachmentName = path.split("/").pop()
-      root.attachmentChat = root.activeJid
+      stager.source = path
+      stager.voice = false
+      stager.running = true
     }
   }
 
@@ -541,6 +541,26 @@ Panel {
     }
   }
 
+  // The daemon runs with a private /tmp, so a file that is going out is
+  // copied where it can read it before it is sent.
+  Process {
+    id: stager
+    property string source: ""
+    property bool voice: false
+    command: [root.pluginDir + "/bin/omarchy-whatsapp-stage", stager.source]
+    stdout: SplitParser {
+      onRead: function (data) {
+        var path = String(data || "").trim()
+        if (path.length === 0) return
+        root.attachFile(path)
+        root.attachmentIsVoice = stager.voice
+      }
+    }
+    onExited: function (exitCode) {
+      if (exitCode !== 0) root.statusLine = "Could not read the file to send"
+    }
+  }
+
   // Opus, because that is what a voice note is.
   Process {
     id: converter
@@ -548,13 +568,10 @@ Panel {
     property string target: ""
     command: ["ffmpeg", "-y", "-loglevel", "error", "-i", converter.source, "-c:a", "libopus", "-b:a", "32k", converter.target]
     onExited: function (exitCode) {
-      if (exitCode === 0 && root.recordingPath.length > 0) {
-        root.attachFile(converter.target)
-      } else {
-        // Without a converter the recording is still worth sending, as a file.
-        root.attachFile(converter.source)
-      }
-      root.attachmentIsVoice = true
+      // Without a converter the recording is still worth sending, as a file.
+      stager.source = exitCode === 0 ? converter.target : converter.source
+      stager.voice = true
+      stager.running = true
       root.statusLine = ""
     }
   }
@@ -1407,7 +1424,9 @@ Panel {
           if (!drop.hasUrls || drop.urls.length === 0) return
           var url = String(drop.urls[0])
           if (url.indexOf("file://") !== 0) return
-          root.attachFile(decodeURIComponent(url.replace(/^file:\/\//, "")))
+          stager.source = decodeURIComponent(url.replace(/^file:\/\//, ""))
+          stager.voice = false
+          stager.running = true
         }
 
         Rectangle {

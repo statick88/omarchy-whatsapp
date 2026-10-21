@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import net from 'node:net'
 import { execFile } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
@@ -63,8 +63,12 @@ test('the CLI sends the file the user named', async () => {
 
     assert.equal(daemon.frame.t, 'sendMedia')
     assert.equal(daemon.frame.jid, '123@s.whatsapp.net')
-    assert.equal(daemon.frame.path, file)
     assert.equal(daemon.frame.caption, 'look at this')
+    // The file travels as a copy where the daemon can read it, keeping its
+    // name and its content.
+    assert.notEqual(daemon.frame.path, file)
+    assert.match(daemon.frame.path, /photo\.png$/)
+    assert.equal(readFileSync(daemon.frame.path, 'utf8'), readFileSync(file, 'utf8'))
   })
 })
 
@@ -80,8 +84,9 @@ test('a relative file is resolved against the shell that ran the command', async
       cwd: dir
     })
 
-    assert.equal(daemon.frame.path, resolve(dir, 'notes.pdf'))
     assert.ok(daemon.frame.path.startsWith('/'), 'the path that crosses the socket is absolute')
+    assert.match(daemon.frame.path, /notes\.pdf$/)
+    assert.equal(readFileSync(daemon.frame.path, 'utf8'), readFileSync(join(dir, 'notes.pdf'), 'utf8'))
   })
 })
 
