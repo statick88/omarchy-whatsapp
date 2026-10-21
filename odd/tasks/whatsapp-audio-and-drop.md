@@ -89,6 +89,8 @@ plays it.
 | T8 | S2 | inline | 65ad029 | The recording lands where only the user can read it. |
 | T9 | S4 | inline | 5185627 | The comment above `statusGlyph` belongs to `statusGlyph`. |
 | T10 | S1, S4 | inline | 4591e86 | A voice note that was sent shows a play button, not a label. |
+| T11 | S4 | inline | c584dd3 | The staging executable says what it is. |
+| T12 | S4 | inline | bfa2e4b | An acknowledgement only clears what it sent. |
 
 ---
 
@@ -224,3 +226,37 @@ a copy of it.
 
 The panel was checked after the fix: the voice note that was sent shows
 `▶ 0:02` with its own length, the same as the one that arrived.
+
+### L8 (2026-10-21)
+
+The native review ran over the whole branch with four lenses and a refuter.
+The refuter corroborated two findings and left one undecided, and the two
+corroborated ones said the same thing from two lenses.
+
+**The acknowledgement wiped what the user wrote next.** The panel emptied the
+composer when the daemon answered, and it matched the answer by chat, so any
+answer for that chat emptied the composer at that moment. The answer for a
+message that is still travelling arrives after the upload resolves, so text
+typed in the meantime, or a file picked for the next message, were destroyed
+without a word and without a way back. Two lenses found it on their own.
+
+The fix: every request carries an id, the answer is matched to the request it
+belongs to, and only what still belongs to that message goes with it. What was
+typed or picked since is the user's and stays. The rules live in `Model.js`,
+where node can run them, and the daemon already answered with the id of the
+request. T12.
+
+**The staging executable guessed what it was.** `bin/omarchy-whatsapp-stage`
+had no extension and used module syntax, so Node had to guess whether it was
+a module or a script. The guess lands on the wrong side on Node 20, where the
+guess does not exist at all, and it is the only route the panel has to a file.
+The refuter could not decide how bad it was, because the Node of the target
+was not in the evidence; the part it did confirm is that nothing in the
+candidate ever ran that executable: the tests covered the library behind it
+and the CLI that imports it in-process.
+
+The fix: the extension says it is a module, and the test runs the executable
+itself. T11.
+
+The correction went in its own worktree, on its own branch
+(`fix/review-corrections`), and was merged into the branch of the feature.
