@@ -524,7 +524,13 @@ Panel {
   MediaPlayer {
     id: player
     audioOutput: playbackOutput
-    onStopped: root.playingMessageId = ""
+    // The player has no stopped signal: the state is a property, and the note
+    // that was playing is over when it goes back to stopped.
+    onPlaybackStateChanged: {
+      if (playbackState === MediaPlayer.StoppedState && root.playingMessageId !== "") {
+        root.playingMessageId = ""
+      }
+    }
     onErrorOccurred: function (error, errorString) {
       root.playingMessageId = ""
       root.statusLine = "Could not play the voice note: " + errorString
