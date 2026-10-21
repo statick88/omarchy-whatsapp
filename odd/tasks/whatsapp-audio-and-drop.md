@@ -100,6 +100,7 @@ plays it.
 | T19 | S2, S3 | inline | 373d89e | The file goes with the conversation it was picked for. |
 | T20 | S4 | inline | 9cc4c61 | The copies that were never sent are swept. |
 | T21 | S4 | inline | a57060b | The text goes with the message, and only with it. |
+| T22 | S2 | inline | d65d6e1 | The panel loads again, and the recorder says when it fails. |
 
 ---
 
@@ -392,3 +393,37 @@ Two things were left for later, and they are not from this change: the text
 path of the daemon answers that a message went out even when nothing was
 delivered, which is how the daemon has always answered, and the vocabulary
 of the mime types is written in three places.
+
+### L13 (2026-10-21)
+
+The user said it did not work, and the panel was indeed broken: it did not
+open at all. The log of the shell said why, in one line, twenty-five times:
+
+```
+Panel.qml[647:5]: Cannot assign to non-existent property "onErrorOccurred"
+```
+
+**The capture session was given a handler for a signal it does not have.**
+QMediaCaptureSession says when the things plugged into it change, and nothing
+else: it has no `errorOccurred`, no `error` and no `state`. The recorder is the
+one that knows, and it says it there. And a QML object that cannot be created
+takes the whole panel with it, so the panel did not open at all.
+
+**The verification had a hole, and it is the interesting part of this.** The
+warning was there all along: qmllint reported it ("no matching signal found
+for handler"), and the check compared the NUMBER of warnings before and after
+the change, which said nothing about what they said. And qmllint does not
+check the signals of `Panel.qml` at all: it checks the files whose types it
+can resolve, and it says nothing about this one. A handler that does not
+exist, in a file made of a hundred of them, was invisible.
+
+So the panel is now loaded in a shell of its own by
+`tests/test_panel_runtime.sh`, which reads the log. It fails when the panel
+does not load, and it fails when the panel loads with a warning. The test was
+proved both ways: it fails with the broken panel and passes with the fixed
+one.
+
+One more thing the machine said: the shell of Omarchy does not recompile the
+QML of a plugin when it reloads it. The file on disk was right and the shell
+kept serving the old one, warning and all, until the shell was restarted
+(`omarchy-restart-shell`). T22.
