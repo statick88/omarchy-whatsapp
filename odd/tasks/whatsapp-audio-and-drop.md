@@ -95,6 +95,10 @@ plays it.
 | T14 | S4 | inline | 44c845d | A message that is on its way is not sent twice. |
 | T15 | S2 | inline | 749bd2f | The recording is only written where the user alone can read it. |
 | T16 | S4 | inline | 749bd2f | A message on its way stays on its way until the daemon answers. |
+| T17 | S4 | inline | eda26d1 | A staged copy stays inside the cache. |
+| T18 | S4 | inline | 5b30962 | The daemon answers what actually happened. |
+| T19 | S2, S3 | inline | 373d89e | The file goes with the conversation it was picked for. |
+| T20 | S4 | inline | 9cc4c61 | The copies that were never sent are swept. |
 
 ---
 
@@ -323,3 +327,40 @@ the message that is the only one on its way. T16.
 
 The three rules went in `Model.js` too, and each was proved by taking the fix
 out and watching the test fail for the behaviour it covers.
+
+### L11 (2026-10-21)
+
+The fourth review approved the candidate. Its thirty-seven findings are all
+advisory, but a few of them are real, and a pull request that goes to a
+public repository is read by people who were not here for the story.
+
+**The name that travels was joined into the path of the copy on disk as it
+came**, so a name with a path in it put the copy outside the cache, and the
+deletion that follows a successful send was guarded by a plain prefix test
+that such a path passes. The name is a name and never a place now, the path
+is resolved before it is checked, the size is looked at before the copy is
+made, and the directory of the copy carries the process that made it: the
+stager runs as its own process for every file, so the counter started at zero
+every time. T17.
+
+**A media send was acknowledged whether or not anything went out**, so the
+panel cleared the caption and the file for a message that never left.
+Nothing went out is now an answer the panel can act on. The command line
+tool sent its requests without an id, so a failure raised on its behalf
+could not be told apart from the panel's own message. T18.
+
+**The conversation was checked when the file was attached and when the user
+changed conversation, but not when the file goes out**, and the daemon can
+point the panel at another chat without the panel choosing it. It is checked
+again before the file goes. A microphone that is absent or busy said nothing
+at all: the panel waited for a recording that never started. T19.
+
+**A file the user took back, a send that failed and a staging that never
+reached the daemon all left a copy of the file in the cache**, and nothing
+ever removed one. They are swept after an hour. The README said three places
+where the logout removes four. T20.
+
+Two findings were checked against the machine and did not hold: the staging
+queue was never stuck (two files in a row were staged, one after the other,
+and the flag of the process is cleared when it ends), and the message the
+panel sees is now tested where it lives.
