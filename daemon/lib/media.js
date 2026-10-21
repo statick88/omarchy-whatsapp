@@ -42,6 +42,19 @@ export function existingMediaPath(message) {
   return existsSync(guessed) ? guessed : ''
 }
 
+// The message the panel sees.
+//
+// The cache on disk is the truth about a media: one that finished
+// downloading after the message was stored is still found there, so the
+// panel gets its path instead of a label. The media itself and the retry
+// content are not for the panel.
+export function publicMessage(message) {
+  if (!message) return message
+  const { media: _ignored, retryMessage: _retryMessage, ...rest } = message
+  if (!rest.imagePath) rest.imagePath = existingMediaPath(message)
+  return rest
+}
+
 function toBuffer(value) {
   if (!value) return null
   if (Buffer.isBuffer(value)) return value

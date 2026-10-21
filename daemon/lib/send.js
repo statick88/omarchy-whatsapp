@@ -25,14 +25,21 @@ export async function handleSendMedia(payload, reply, deps) {
   const routingJid = store.routingJid(rawJid) || rawJid
   const sent = await sock.sendMessage(routingJid, message, {})
 
+  // Nothing went out: the panel is told so, because it would otherwise clear
+  // the caption and the file for a message that never left.
+  if (!sent) {
+    reply({ t: 'error', for: 'sendMedia', id, message: 'the message was not sent' })
+    return
+  }
+
   // The copy the daemon made for this message has done its job: WhatsApp has
   // the file now. A file that could not go out stays where it is, so it can
   // be tried again without the user picking it all over again.
-  if (sent) discardStaged(upload.path)
+  discardStaged(upload.path)
 
   // The panel learns about the message the same way it learns about any other:
   // through the shared fan-out, so every monitor shows it.
-  if (sent) deliver(routingJid, rawJid, sent)
+  deliver(routingJid, rawJid, sent)
 
   reply({ t: 'ack', id, ok: true, jid: rawJid })
 }

@@ -143,3 +143,22 @@ test('a text message still goes out the way it always did', async () => {
     assert.equal('path' in daemon.frame, false)
   })
 })
+
+test('the request carries an id, so the answer can be matched to it', async () => {
+  await withDaemon(async (daemon) => {
+    await runCtl(['send', '123@s.whatsapp.net', 'hello'], { socketPath: daemon.socketPath })
+    assert.equal(daemon.frame.t, 'send')
+    // A failure without an id would be about somebody else's message.
+    assert.ok(daemon.frame.id, 'the request has an id')
+  })
+
+  await withDaemon(async (daemon) => {
+    const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-ctl-file-'))
+    const file = join(dir, 'photo.png')
+    writeFileSync(file, Buffer.alloc(8, 1))
+
+    await runCtl(['send-media', '123@s.whatsapp.net', file], { socketPath: daemon.socketPath })
+    assert.equal(daemon.frame.t, 'sendMedia')
+    assert.ok(daemon.frame.id, 'the request has an id')
+  })
+})

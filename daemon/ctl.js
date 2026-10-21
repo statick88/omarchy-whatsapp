@@ -9,6 +9,16 @@ import { stageOutgoing } from './lib/staging.js'
 
 const [command, ...args] = process.argv.slice(2)
 
+// Every request that waits for an answer carries an id, so the answer can be
+// matched to it: a failure without one would be about somebody else's
+// message.
+let requestSeq = 0
+
+function requestId() {
+  requestSeq += 1
+  return `cli-${process.pid}-${Date.now()}-${requestSeq}`
+}
+
 const USAGE = `Usage: omarchy-whatsapp-ctl <command> [args]
 
   status                 connection state, linked account, unread count
@@ -46,7 +56,7 @@ function buildRequest() {
       return { t: 'messages', jid: args[0], limit: Number(args[1]) || 60 }
     case 'send':
       if (args.length < 2) fail('send: jid and text required')
-      return { t: 'send', jid: args[0], text: args.slice(1).join(' ') }
+      return { t: 'send', jid: args[0], text: args.slice(1).join(' '), id: requestId() }
     case 'send-media': {
       if (args.length < 2) fail('send-media: jid and file required')
       // The daemon is another process with its own working directory, so a
@@ -64,7 +74,8 @@ function buildRequest() {
         t: 'sendMedia',
         jid: args[0],
         path: staged,
-        caption: args.slice(2).join(' ')
+        caption: args.slice(2).join(' '),
+        id: requestId()
       }
     }
     case 'read':

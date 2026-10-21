@@ -20,7 +20,7 @@ import { scanAppState } from './lib/appstate.js'
 import { Notifier } from './lib/notify.js'
 import { Bus } from './lib/server.js'
 import { extractMedia, isGroupJid, isIgnorableChat, isPhotoPlaceholder, isSilent, messageText, messageType, prettyJid } from './lib/message.js'
-import { existingMediaPath, MediaCache } from './lib/media.js'
+import { existingMediaPath, MediaCache, publicMessage } from './lib/media.js'
 import { handleSendMedia } from './lib/send.js'
 import {
   applyChatNotificationPreferences,
@@ -323,16 +323,6 @@ function isRecentIncoming(message) {
 
 // Convert a raw Baileys message into the flat shape the panel renders and the
 // store persists.
-function publicMessage(message) {
-  if (!message) return message
-  const { media: _ignored, retryMessage: _retryMessage, ...rest } = message
-  // The cache on disk is the truth about a media: one that finished
-  // downloading after the message was stored is still found there, so the
-  // panel gets its path instead of a label.
-  if (!rest.imagePath) rest.imagePath = existingMediaPath(message)
-  return rest
-}
-
 function asStatus(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (value && typeof value.toNumber === 'function') {

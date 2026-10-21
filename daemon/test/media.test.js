@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { extractMedia, isPhotoPlaceholder } from '../lib/message.js'
-import { mediaPathFor } from '../lib/media.js'
+import { mediaPathFor, publicMessage } from '../lib/media.js'
+import { unlinkSync, writeFileSync } from 'node:fs'
 
 // A voice note is media too: the daemon can fetch it and the panel can play
 // it. Until this existed, a voice note was a label and nothing else.
@@ -66,4 +67,27 @@ test('a voice note is written as an opus file', () => {
 
 test('a voice note is not a photo placeholder', () => {
   assert.equal(isPhotoPlaceholder('Voice message'), false)
+})
+
+test('a media that is on disk reaches the panel with its path', () => {
+  const id = 'TESTMEDIA0001'
+  const path = mediaPathFor(id, 'audio/ogg; codecs=opus')
+  writeFileSync(path, Buffer.from('a voice note'))
+
+  try {
+    const message = publicMessage({
+      id,
+      ts: 1,
+      type: 'audioMessage',
+      media: { kind: 'audio', mimetype: 'audio/ogg; codecs=opus' }
+    })
+
+    // The cache on disk is the truth about a media: one that finished
+    // downloading after the message was stored is still found there.
+    assert.equal(message.imagePath, path)
+    // The media itself is not for the panel.
+    assert.equal(message.media, undefined)
+  } finally {
+    unlinkSync(path)
+  }
 })

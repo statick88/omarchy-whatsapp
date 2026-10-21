@@ -340,3 +340,34 @@ test('the acknowledgement carries the id of the request', async () => {
     }
   )
 })
+
+test('a message that did not go out is not acknowledged', async () => {
+  const path = tempFile('photo.png')
+  const sock = {
+    async sendMessage() {
+      // Nothing was delivered: the panel has to know, or it clears the
+      // caption and the file for a message that never left.
+      return null
+    }
+  }
+
+  await withBus(
+    (payload, reply) => handleSendMedia(payload, reply, {
+      sock,
+      connection: 'open',
+      store: { routingJid: (jid) => jid },
+      deliver: () => {}
+    }),
+    async (socketPath) => {
+      const socket = await connect(socketPath)
+      const answer = readFrame(socket)
+      socket.write(JSON.stringify({ t: 'sendMedia', id: 'r8', jid: '123@s.whatsapp.net', path }) + '\n')
+      const frame = await answer
+      socket.destroy()
+
+      assert.equal(frame.t, 'error')
+      assert.equal(frame.for, 'sendMedia')
+      assert.equal(frame.id, 'r8')
+    }
+  )
+})
