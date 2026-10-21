@@ -37,6 +37,9 @@ Panel {
   // A recording in progress, and where it is being written.
   property bool recording: false
   property string recordingPath: ""
+  // The conversation the recording was made in: it goes with that one, and
+  // the copy is made long after the recording stopped.
+  property string recordingChat: ""
   // Where a recording is written. The runtime directory belongs to the user
   // alone and is wiped at logout, which /tmp is not: anything in /tmp can be
   // read by every user on the machine.
@@ -275,6 +278,10 @@ Panel {
     var path = root.attachmentPath
     // A file on its own is a message too: the text is its caption.
     if ((!text || !text.trim().length) && !path) return
+    // A message that is still on its way is not sent again: the answer for
+    // the first one is what clears the composer, and a second one would
+    // deliver the message twice.
+    if (!Model.canSendNow(root.pendingSend)) return
     if (!root.client || !root.client.ready) {
       root.statusLine = "Not connected to WhatsApp"
       return
@@ -291,6 +298,7 @@ Panel {
       root.statusLine = ""
       typingTimer.stop()
       root.client.setTyping(root.activeJid, "paused")
+      sendWatchdog.restart()
     }
   }
 
@@ -314,19 +322,28 @@ Panel {
 
   // A file becomes the attachment, whatever route it arrived by: the dialog, a
   // drop on the panel, or a recording.
-  function attachFile(path) {
+  //
+  // The conversation it was picked for comes with it: the user can pick a
+  // file and change conversation while it is being copied, and the file goes
+  // with the conversation it was picked for, or nowhere.
+  function attachFile(path, chat) {
     if (!path || path.length === 0) return
+    var belongs = Model.attachmentChatFor(chat, root.activeJid)
+    if (belongs.length === 0) {
+      root.statusLine = "The file was picked for another conversation"
+      return
+    }
     root.attachmentPath = path
     root.attachmentName = path.split("/").pop()
-    root.attachmentChat = root.activeJid
+    root.attachmentChat = belongs
   }
 
-  // Staging a file: the name it travels with and whether it is a voice note
-  // belong to the request, not to the last one. A temporary says so too, so
-  // the copy takes it away once it is there.
-  function stageFile(path, name, voice, temporary) {
+  // Staging a file: the name it travels with, whether it is a voice note and
+  // the conversation it was picked for belong to the request, not to the last
+  // one. A temporary says so too, so the copy takes it away once it is there.
+  function stageFile(path, name, voice, temporary, chat) {
     root.stagingQueue = root.stagingQueue.concat([
-      { path: path, name: name || "", voice: voice === true, temporary: temporary === true }
+      { path: path, name: name || "", voice: voice === true, temporary: temporary === true, chat: chat || "" }
     ])
     root.startStaging()
   }
@@ -365,6 +382,9 @@ Panel {
     recorder.record()
     root.recording = true
     root.recordingPath = path
+    // The conversation the recording is made in: the copy is made long after
+    // the recording stopped, and it goes with this one.
+    root.recordingChat = root.activeJid
   }
 
   // A phone plays a voice note in place, and WhatsApp only takes opus for
@@ -404,7 +424,8 @@ Panel {
       // stray percent sign must not take the dialog down with it.
       var path = Model.filePathFromUrl(url)
       if (path.length === 0) return
-      root.stageFile(path, "", false)
+      // The conversation the file is picked for is the one that is open now.
+      root.stageFile(path, "", false, false, root.activeJid)
     }
   }
 
@@ -525,6 +546,7 @@ Panel {
       composer.text = Model.afterAcknowledge(composer.text, root.pendingSend.text)
       if (root.attachmentPath === root.pendingSend.path) root.clearAttachment()
       root.pendingSend = null
+      sendWatchdog.stop()
     }
 
     function onMessageStatusChanged(jid, messageId, status) {
@@ -546,6 +568,7 @@ Panel {
       if (root.pendingSend && root.pendingSend.id === id) {
         composer.text = Model.restoredAfterFailure(composer.text, root.pendingSend.text)
         root.pendingSend = null
+        sendWatchdog.stop()
       }
       if (command === "refresh") {
         root.refreshing = false
@@ -622,7 +645,7 @@ Panel {
         var path = String(data || "").trim()
         var request = root.stagingQueue.length > 0 ? root.stagingQueue[0] : null
         if (path.length === 0 || !request) return
-        root.attachFile(path)
+        root.attachFile(path, request.chat)
         root.attachmentIsVoice = request.voice
       }
     }
@@ -643,7 +666,7 @@ Panel {
       if (exitCode === 0) {
         // The converted note is a temporary: the copy that travels replaces
         // it. The recording it came from has nothing left to do either.
-        root.stageFile(converter.target, "voice-note.opus", true, true)
+        root.stageFile(converter.target, "voice-note.opus", true, true, root.recordingChat)
         root.discardRecording(converter.source)
         root.statusLine = ""
         return
@@ -651,7 +674,7 @@ Panel {
       // Without opus the recording is not a voice note: WhatsApp plays a voice
       // note in place and this one would not play at all. It goes as a file,
       // and the person sending it is told that is what happened.
-      root.stageFile(converter.source, "voice-note.m4a", false, true)
+      root.stageFile(converter.source, "voice-note.m4a", false, true, root.recordingChat)
       root.statusLine = "The recording could not be turned into a voice note; it goes as a file"
     }
   }
@@ -694,6 +717,19 @@ Panel {
     interval: 3000
     repeat: false
     onTriggered: if (root.client && root.activeJid) root.client.setTyping(root.activeJid, "paused")
+  }
+
+  // The daemon always answers, but if it does not the composer would stay
+  // locked against a second send for ever. After a while the message is
+  // given up on: what is in the composer stays, and it can be sent again.
+  Timer {
+    id: sendWatchdog
+    interval: 30000
+    repeat: false
+    onTriggered: {
+      root.pendingSend = null
+      root.statusLine = "The daemon did not answer; the message was not sent"
+    }
   }
 
   Timer {
@@ -1492,7 +1528,9 @@ Panel {
               anchors.verticalCenter: parent.verticalCenter
               iconText: "\uf1d8"
               tooltipText: "Send"
-              enabled: root.linked && (composer.text.trim().length > 0 || root.attachmentPath.length > 0)
+              // A message that is still on its way is not sent twice.
+              enabled: root.linked && Model.canSendNow(root.pendingSend)
+                && (composer.text.trim().length > 0 || root.attachmentPath.length > 0)
               foreground: root.foreground
               fontFamily: root.fontFamily
               onClicked: root.sendReply()
@@ -1515,7 +1553,9 @@ Panel {
           // stray percent sign must not take the panel down with it.
           var path = Model.filePathFromUrl(String(drop.urls[0]))
           if (path.length === 0) return
-          root.stageFile(path, "", false)
+          // The conversation the file is dropped in is the one that is open
+          // now.
+          root.stageFile(path, "", false, false, root.activeJid)
         }
 
         Rectangle {
