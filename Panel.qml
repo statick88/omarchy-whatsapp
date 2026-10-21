@@ -39,6 +39,8 @@ Panel {
   property string recordingPath: ""
   // A file dropped on the panel, waiting to be attached.
   property string droppedPath: ""
+  // The colour the drop surface tints itself with.
+  readonly property color dropTint: bar ? bar.urgent : Color.accent
   property bool pinToLatest: true
   property bool logoutConfirmOpen: false
   property bool refreshing: false
@@ -1455,8 +1457,10 @@ Panel {
         Rectangle {
           anchors.fill: parent
           visible: dropArea.containsDrag
-          color: Qt.rgba(root.bar ? root.bar.urgent : Color.accent, 0.08)
-          border.color: root.bar ? root.bar.urgent : Color.accent
+          // Qt.rgba takes three numbers and an alpha, not a colour and an
+          // alpha, so the colour is taken apart first.
+          color: Qt.rgba(dropTint.r, dropTint.g, dropTint.b, 0.08)
+          border.color: dropTint
           border.width: 2
           radius: Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(6)
         }
