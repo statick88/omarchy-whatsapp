@@ -58,6 +58,21 @@ para poder enviar
 - Text messages are untouched.
 - The daemon keeps speaking the same newline-delimited JSON.
 
+### S5: What the README says has to be true
+
+The README is the first thing a maintainer reads. Before this feature it said:
+
+> Media is never downloaded — photos and voice notes show as `📷 Photo`,
+> `🎤 Voice message`, and so on.
+
+That sentence is false once the daemon downloads a voice note and the panel
+plays it.
+
+- The README describes how to play a voice note, how to record one and how to
+  drop a file on the panel.
+- The README does not claim that media is never downloaded.
+- The README says where the media cache lives, because there is one now.
+
 ---
 
 ## Tasks
@@ -68,6 +83,12 @@ para poder enviar
 | T2 | S2 | inline | 817e29b | The panel records, converts to opus and attaches it. |
 | T3 | S3 | inline | 817e29b | A file dropped on the panel is attached. |
 | T4 | S4 | inline | 58e5511, 97663e5 | The whole suite, qmllint and the live panel. |
+| T5 | S5 | inline | 1106b8d | The README tells the truth about media. |
+| T6 | S3, S4 | inline | 9f787be | A dropped file whose name holds a percent sign is still attached. |
+| T7 | S2, S4 | inline | f9180a6 | A file that goes out does not stay behind. |
+| T8 | S2 | inline | 65ad029 | The recording lands where only the user can read it. |
+| T9 | S4 | inline | 5185627 | The comment above `statusGlyph` belongs to `statusGlyph`. |
+| T10 | S1, S4 | inline | 4591e86 | A voice note that was sent shows a play button, not a label. |
 
 ---
 
@@ -145,3 +166,61 @@ Verified against the real account, not only against the tests:
 - Recording writes a file, and the conversion turns it into a valid
   Ogg/Opus, which is what a voice note is.
 - 65 daemon tests, the lifecycle test and qmllint are green.
+
+### L6 (2026-10-21)
+
+The feature was green, so the rest was making it true. Reading the code
+against the machine found four things:
+
+- The README still said "Media is never downloaded — photos and voice notes
+  show as `📷 Photo`, `🎤 Voice message`". That sentence became false the
+  moment the daemon started downloading a voice note. T5.
+- The drop handler called `decodeURIComponent` on the dropped URL with nothing
+  around it. A file whose name holds a percent sign (`100%.png`) makes that
+  call throw, and the drop is lost with the panel's handler broken. The file
+  dialog had the same problem and did guard it; the drop did not. The
+  decoding belongs in the Qt-free model, where it can be tested. T6.
+- Every file that went out was copied into the media cache and left there.
+  The cache already held 104 of them, and nothing ever removed one. T7.
+- The recording landed in `/tmp` with a fixed name: two panels (one per
+  monitor) recording at once wrote over each other, and `/tmp` is readable by
+  every user on the machine. T8.
+
+And one that is only a comment: the note about the Baileys status enum had
+been left above `formatDuration` instead of above `statusGlyph`, which is the
+function it describes. T9.
+
+### L7 (2026-10-21)
+
+The user recorded a voice note and said a bug happened. The recording itself
+was fine — it went out as a real voice note (`ptt: true`, opus, 2 seconds) —
+but the panel showed it as the plain label "🎤 Voice message" instead of a play
+button. A screenshot of the panel showed three voice notes: the one that
+arrived played (`▶ 0:03`), and the two that were sent did not.
+
+The machine said why:
+
+- The file was on disk the whole time: `~/.cache/omarchy-whatsapp/media/
+  3EB093129A277272641E43.opus`, 10540 bytes, a valid Ogg/Opus.
+- The stored message had no path: `imagePath` was empty.
+- The panel draws a play button only when the message has a path, so an empty
+  path is a label.
+
+The path was lost in a race:
+
+- The daemon sends the message, and the media cache starts downloading it.
+- WhatsApp echoes the message back, and the echo is ingested **before** the
+  download finishes. That copy knows no path, because there was no path yet.
+- `store.upsertMessage` merges the echo over the stored message, and the
+  empty path overwrote the good one.
+- When the download finished, the cache wrote the path into the copy it held,
+  which was no longer the copy the store held. The path went nowhere.
+
+T10 fixes it in three places: the path is written where the message lives
+when the download finishes, a copy that arrives without a path cannot take
+the known one away, and the cache on disk is consulted before a message is
+handed to the panel — the disk is the truth about a media, the store is only
+a copy of it.
+
+The panel was checked after the fix: the voice note that was sent shows
+`▶ 0:02` with its own length, the same as the one that arrived.
