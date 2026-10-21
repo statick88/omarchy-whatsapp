@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, sep } from 'node:path'
 
-import { discardStaged, stageOutgoing } from '../lib/staging.js'
+import { discardStaged, stageOutgoing, sweepStaged } from '../lib/staging.js'
 import { MAX_UPLOAD_BYTES } from '../lib/outgoing.js'
 import { mediaDir } from '../lib/paths.js'
 
@@ -221,4 +221,18 @@ test('the executable takes a temporary away with its copy', () => {
   assert.match(staged, /voice-note\.opus$/)
   assert.equal(existsSync(staged), true)
   assert.equal(existsSync(source), false)
+})
+
+test('the copies that were never sent are swept', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  const staged = stageOutgoing(source)
+  // A file the user took back, or a send that never happened, leaves a copy
+  // behind. It is swept after a while.
+  const swept = sweepStaged(0)
+
+  assert.ok(swept >= 1)
+  assert.equal(existsSync(staged), false)
 })

@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, rmdirSync, statSync, unlinkSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readdirSync, rmdirSync, statSync, unlinkSync } from 'node:fs'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { mediaDir } from './paths.js'
 import { MAX_UPLOAD_BYTES } from './outgoing.js'
@@ -10,6 +10,9 @@ import { MAX_UPLOAD_BYTES } from './outgoing.js'
 //
 // The copy is what is sent, so the file the user picked is still the file
 // that goes out, with its own name.
+
+// How long a copy that was never sent is kept before it is swept.
+export const STALE_STAGE_MS = 60 * 60 * 1000
 
 let staged = 0
 
@@ -75,4 +78,38 @@ export function discardStaged(path) {
     // Not empty, or already gone: nothing left to clean up.
   }
   return true
+}
+
+// The copies that were never sent: a file the user took back, a send that
+// failed, a staging that never reached the daemon. They are swept after a
+// while, so the cache does not keep copies of the user's files for ever.
+export function sweepStaged(olderThanMs = STALE_STAGE_MS) {
+  const root = join(mediaDir, 'outgoing')
+  let entries = []
+  try {
+    entries = readdirSync(root, { withFileTypes: true })
+  } catch {
+    // Nothing has been staged yet.
+    return 0
+  }
+
+  const now = Date.now()
+  let removed = 0
+  for (const entry of entries) {
+    const target = join(root, entry.name)
+    try {
+      const info = statSync(target)
+      if (now - info.mtimeMs < olderThanMs) continue
+      if (entry.isDirectory()) {
+        for (const file of readdirSync(target)) unlinkSync(join(target, file))
+        rmdirSync(target)
+      } else {
+        unlinkSync(target)
+      }
+      removed += 1
+    } catch {
+      // It is gone already, or it is not ours to remove.
+    }
+  }
+  return removed
 }

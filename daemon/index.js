@@ -22,6 +22,7 @@ import { Bus } from './lib/server.js'
 import { extractMedia, isGroupJid, isIgnorableChat, isPhotoPlaceholder, isSilent, messageText, messageType, prettyJid } from './lib/message.js'
 import { existingMediaPath, MediaCache, publicMessage } from './lib/media.js'
 import { handleSendMedia } from './lib/send.js'
+import { sweepStaged } from './lib/staging.js'
 import {
   applyChatNotificationPreferences,
   isChatMuted,
@@ -1475,6 +1476,11 @@ function claimPid() {
 
 async function main() {
   ensureDirs()
+  // The copies that were never sent are swept, so the cache does not keep
+  // copies of the user's files for ever.
+  sweepStaged()
+  const stagedSweep = setInterval(() => sweepStaged(), 15 * 60 * 1000)
+  stagedSweep.unref?.()
   startPluginStateWatch()
   if (stopping) return
   if (claimPid()) await sleep(1500)

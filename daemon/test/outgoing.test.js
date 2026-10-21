@@ -10,7 +10,8 @@ import {
   mediaKindFor,
   mediaMessageFor,
   mimetypeFor,
-  prepareUpload
+  prepareUpload,
+  MAX_UPLOAD_MB
 } from '../lib/outgoing.js'
 
 function tempFile(name, bytes = 16) {
@@ -78,7 +79,8 @@ test('a file over the size limit is refused with the limit in the reason', () =>
   // A sparse file: over the limit as a file, almost nothing on the disk.
   truncateSync(path, MAX_UPLOAD_BYTES + 1)
   assert.throws(() => prepareUpload(path), /too large/i)
-  assert.throws(() => prepareUpload(path), /16 MB/)
+  // The message says the limit the daemon enforces, not a number of its own.
+  assert.throws(() => prepareUpload(path), new RegExp(`${MAX_UPLOAD_MB} MB`))
 })
 
 test('a file at the size limit is allowed', () => {

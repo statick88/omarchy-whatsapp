@@ -12,6 +12,9 @@ import { basename, extname } from 'node:path'
 // limit applies to everything this plugin can send.
 export const MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 
+// The same limit, said the way a person reads it.
+export const MAX_UPLOAD_MB = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))
+
 const MIME_TYPES = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -95,7 +98,7 @@ export function prepareUpload(path) {
   const size = info.size
 
   if (size > MAX_UPLOAD_BYTES) {
-    throw new Error(`send-media: file is too large (16 MB max): ${target}`)
+    throw new Error(`send-media: file is too large (${MAX_UPLOAD_MB} MB max): ${target}`)
   }
 
   const fileName = displayNameFor(target)

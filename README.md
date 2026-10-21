@@ -189,7 +189,7 @@ voice note that arrives is downloaded into the cache above, so the panel can
 show and play it; a video or a document stays a label, because neither is worth
 a download the panel cannot show. Open the full client for the rest.
 
-`omarchy-whatsapp logout` unlinks the device and deletes all three.
+`omarchy-whatsapp logout` unlinks the device and deletes all four.
 
 Disabling the bar widget with `omarchy plugin disable io.github.ricky.whatsapp`
 also stops and disables the WhatsApp user service. Linked-device credentials
