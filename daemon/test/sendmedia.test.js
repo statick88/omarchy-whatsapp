@@ -310,3 +310,33 @@ test('a copy that could not go out stays, so it can be tried again', async () =>
   assert.equal(existsSync(staged), true)
   discardStaged(staged)
 })
+
+test('the acknowledgement carries the id of the request', async () => {
+  const path = tempFile('photo.png')
+  const sock = {
+    async sendMessage() {
+      return { key: { id: 'MSG9' }, message: { imageMessage: {} }, status: 1 }
+    }
+  }
+
+  await withBus(
+    (payload, reply) => handleSendMedia(payload, reply, {
+      sock,
+      connection: 'open',
+      store: { routingJid: (jid) => jid },
+      deliver: () => {}
+    }),
+    async (socketPath) => {
+      const socket = await connect(socketPath)
+      const answer = readFrame(socket)
+      socket.write(JSON.stringify({ t: 'sendMedia', id: 'r7', jid: '123@s.whatsapp.net', path }) + '\n')
+      const frame = await answer
+      socket.destroy()
+
+      // The panel matches the answer to the request it belongs to, so the
+      // answer has to say which request it is.
+      assert.equal(frame.t, 'ack')
+      assert.equal(frame.id, 'r7')
+    }
+  )
+})

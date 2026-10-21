@@ -82,6 +82,23 @@ function filePathFromUrl(url) {
   }
 }
 
+// What an acknowledgement leaves in the composer.
+//
+// The message that was acknowledged takes the text it carried with it, but
+// only while that text is still there: what the user typed while the
+// message was on its way is theirs, and it is not theirs to lose.
+function afterAcknowledge(current, sent) {
+  return current === sent ? "" : current
+}
+
+// The text that goes back into the composer when a message could not go out.
+//
+// The caption comes back, unless something else was typed in the meantime,
+// which is the user's and stays.
+function restoredAfterFailure(current, sent) {
+  return String(current || "").length === 0 ? String(sent || "") : String(current || "")
+}
+
 function chatTitle(chat) {
   if (!chat) return ""
   return chat.name || prettyJid(chat.jid)

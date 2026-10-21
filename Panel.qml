@@ -280,14 +280,14 @@ Panel {
       return
     }
 
-    var sent = false
+    var sent = ""
     if (path) sent = root.client.sendMedia(root.activeJid, path, text, root.attachmentIsVoice)
     else sent = root.client.sendMessage(root.activeJid, text)
 
     if (sent) {
       // The composer keeps what was typed until the daemon says the message
       // went out: a file it refuses must not cost the caption either.
-      root.pendingSend = { jid: root.activeJid, text: text, path: path }
+      root.pendingSend = { id: sent, jid: root.activeJid, text: text, path: path }
       root.statusLine = ""
       typingTimer.stop()
       root.client.setTyping(root.activeJid, "paused")
@@ -515,11 +515,15 @@ Panel {
       if (root.opened && root.client && root.client.ready) root.client.markRead(jid)
     }
 
-    function onSendAcknowledged(jid) {
+    function onSendAcknowledged(jid, id) {
       // The daemon took the message: now the composer can let go of it.
-      if (!root.pendingSend || root.pendingSend.jid !== jid) return
-      composer.text = ""
-      root.clearAttachment()
+      // Only the message that was acknowledged: an answer for another one
+      // says nothing about what is in the composer now.
+      if (!root.pendingSend || root.pendingSend.id !== id) return
+      // And only what still belongs to it: text typed after the send and a
+      // file picked after it are the user's, and they stay.
+      composer.text = Model.afterAcknowledge(composer.text, root.pendingSend.text)
+      if (root.attachmentPath === root.pendingSend.path) root.clearAttachment()
       root.pendingSend = null
     }
 
@@ -534,12 +538,13 @@ Panel {
       root.patchMessage(messageId, { imagePath: imagePath })
     }
 
-    function onCommandFailed(command, message) {
+    function onCommandFailed(command, message, id) {
       if (command === "send" || command === "sendMedia" || command === "listMember") root.statusLine = message
-      // The daemon refused it: the caption and the file go back, so trying
-      // again does not mean picking the file and typing it all again.
-      if (command === "sendMedia" && root.pendingSend) {
-        composer.text = root.pendingSend.text || composer.text
+      // The daemon refused it: the caption goes back, so trying again does
+      // not mean typing it all again. It does not go over what was typed
+      // since, and the file stays where it is: it can be tried again.
+      if (root.pendingSend && root.pendingSend.id === id) {
+        composer.text = Model.restoredAfterFailure(composer.text, root.pendingSend.text)
         root.pendingSend = null
       }
       if (command === "refresh") {

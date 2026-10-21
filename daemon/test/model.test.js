@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url'
 // evaluated as it would be in the shell.
 const HERE = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(join(HERE, '../../Model.js'), 'utf8').replace(/^\.pragma library\s*$/m, '')
-const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl }`)()
+const model = new Function(`${source}\nreturn { formatDuration, filePathFromUrl, afterAcknowledge, restoredAfterFailure }`)()
 
 test('a voice note is written the way a phone writes it', () => {
   assert.equal(model.formatDuration(0), '0:00')
@@ -43,4 +43,19 @@ test('a url that is not a file is not a path', () => {
   assert.equal(model.filePathFromUrl(''), '')
   assert.equal(model.filePathFromUrl('https://example.com/photo.png'), '')
   assert.equal(model.filePathFromUrl(undefined), '')
+})
+
+test('what was sent goes, what was typed after it stays', () => {
+  // The message that was acknowledged takes the text it carried with it.
+  assert.equal(model.afterAcknowledge('hello', 'hello'), '')
+  // What was typed while the message was on its way is the user's, and it
+  // stays in the composer.
+  assert.equal(model.afterAcknowledge('hello there', 'hello'), 'hello there')
+  assert.equal(model.afterAcknowledge('something else', 'hello'), 'something else')
+})
+
+test('a caption comes back when nothing else was typed', () => {
+  assert.equal(model.restoredAfterFailure('', 'the caption'), 'the caption')
+  // What the user typed is not replaced by the caption that failed.
+  assert.equal(model.restoredAfterFailure('new text', 'the caption'), 'new text')
 })
