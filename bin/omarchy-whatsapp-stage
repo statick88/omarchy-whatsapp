@@ -6,13 +6,14 @@
 import { stageOutgoing } from '../daemon/lib/staging.js'
 
 const source = process.argv[2]
+const wanted = process.argv[3]
 if (!source) {
   process.stderr.write('omarchy-whatsapp-stage: a file is required\n')
   process.exit(1)
 }
 
 try {
-  process.stdout.write(stageOutgoing(source) + '\n')
+  process.stdout.write(stageOutgoing(source, wanted) + '\n')
 } catch (err) {
   process.stderr.write(`omarchy-whatsapp-stage: ${err?.message || err}\n`)
   process.exit(1)

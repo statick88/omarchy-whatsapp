@@ -326,8 +326,9 @@ Panel {
   function startRecording() {
     if (root.recording) return
     // The name the other end sees is the name of the file, so it is a plain
-    // name and not the name of a temporary.
-    var path = "/tmp/omarchy-whatsapp-recording/voice-note.m4a"
+    // name and not the name of a temporary. It goes in /tmp, which is always
+    // there, because the recorder does not make directories.
+    var path = "/tmp/omarchy-whatsapp-voice-note.m4a"
     recorder.outputLocation = "file://" + path
     recorder.record()
     root.recording = true
@@ -554,8 +555,9 @@ Panel {
   Process {
     id: stager
     property string source: ""
+    property string name: ""
     property bool voice: false
-    command: [root.pluginDir + "/bin/omarchy-whatsapp-stage", stager.source]
+    command: [root.pluginDir + "/bin/omarchy-whatsapp-stage", stager.source, stager.name]
     stdout: SplitParser {
       onRead: function (data) {
         var path = String(data || "").trim()
@@ -578,6 +580,7 @@ Panel {
     onExited: function (exitCode) {
       if (exitCode === 0 && root.recordingPath.length > 0) {
         stager.source = converter.target
+        stager.name = "voice-note.opus"
         stager.voice = true
         stager.running = true
         root.statusLine = ""
@@ -587,6 +590,7 @@ Panel {
       // note in place and this one would not play at all. It goes as a file,
       // and the person sending it is told that is what happened.
       stager.source = converter.source
+      stager.name = "voice-note.m4a"
       stager.voice = false
       stager.running = true
       root.statusLine = "The recording could not be turned into a voice note; it goes as a file"

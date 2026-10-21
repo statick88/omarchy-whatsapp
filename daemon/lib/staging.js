@@ -12,8 +12,10 @@ import { mediaDir } from './paths.js'
 
 let staged = 0
 
-export function stageOutgoing(source) {
-  const name = basename(String(source || ''))
+export function stageOutgoing(source, wanted) {
+  // The name that travels is the one the file should arrive with. A recording
+  // has no name of its own yet, so its caller says what it should be called.
+  const name = wanted ? String(wanted) : basename(String(source || ''))
   if (!name) throw new Error('stage: no file given')
 
   // Each staged file gets its own directory, so the name that travels is the

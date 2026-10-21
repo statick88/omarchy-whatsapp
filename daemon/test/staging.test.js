@@ -52,6 +52,17 @@ test('the file that goes out keeps the name the user gave it', () => {
   assert.equal(readFileSync(staged, 'utf8'), 'un informe')
 })
 
+test('a file can be given the name it should arrive with', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'recording.m4a')
+  writeFileSync(source, Buffer.from('una grabacion'))
+
+  const staged = stageOutgoing(source, 'voice-note.opus')
+
+  assert.equal(basename(staged), 'voice-note.opus')
+  assert.equal(readFileSync(staged, 'utf8'), 'una grabacion')
+})
+
 test('a file that is not there is refused', () => {
   assert.throws(() => stageOutgoing('/definitely/not/here.png'), /ENOENT|no such file/i)
 })
