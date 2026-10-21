@@ -99,6 +99,7 @@ plays it.
 | T18 | S4 | inline | 5b30962 | The daemon answers what actually happened. |
 | T19 | S2, S3 | inline | 373d89e | The file goes with the conversation it was picked for. |
 | T20 | S4 | inline | 9cc4c61 | The copies that were never sent are swept. |
+| T21 | S4 | inline | a57060b | The text goes with the message, and only with it. |
 
 ---
 
@@ -364,3 +365,30 @@ Two findings were checked against the machine and did not hold: the staging
 queue was never stuck (two files in a row were staged, one after the other,
 and the flag of the process is cleared when it ends), and the message the
 panel sees is now tested where it lives.
+
+### L12 (2026-10-21)
+
+The change was read once more, this time with the eyes of someone who has to
+maintain it, and three things came out of it.
+
+**The composer waited for the answer before it let go of the text, and the
+answer took the text away only when the composer still held exactly what was
+sent.** With anything else in it, the text that had already been delivered
+stayed in the composer and the next message carried it again. A user who
+cleared the composer and wrote the same thing again had it taken away. The
+composer lets go of the text as soon as the message is handed over now, the
+way it always did, and the answer has no business touching the text: what the
+user types while the message is on its way is the next message. T21.
+
+**The voice mark of an attachment was set outside the attachment.** A pick
+that did not apply, because it was for another conversation, still changed
+the mark of the attachment that was there. The mark travels with the
+attachment now. T21.
+
+**A property of the staging process was written and never read.** It is gone.
+T21.
+
+Two things were left for later, and they are not from this change: the text
+path of the daemon answers that a message went out even when nothing was
+delivered, which is how the daemon has always answered, and the vocabulary
+of the mime types is written in three places.
