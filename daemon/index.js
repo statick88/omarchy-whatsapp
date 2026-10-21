@@ -326,6 +326,10 @@ function isRecentIncoming(message) {
 function publicMessage(message) {
   if (!message) return message
   const { media: _ignored, retryMessage: _retryMessage, ...rest } = message
+  // The cache on disk is the truth about a media: one that finished
+  // downloading after the message was stored is still found there, so the
+  // panel gets its path instead of a label.
+  if (!rest.imagePath) rest.imagePath = existingMediaPath(message)
   return rest
 }
 
@@ -1490,8 +1494,14 @@ async function main() {
 
   media.getSocket = () => sock
   media.onReady = (jid, message) => {
+    const path = message.imagePath || ''
+    // The copy the media cache holds may not be the copy the store holds, so
+    // the path is written where the message lives. A voice note that is on
+    // disk but not in the store shows up as a plain label instead of a play
+    // button.
+    if (path) store.setMediaPath(jid, message.id, path)
     store.markDirty()
-    bus.broadcast({ t: 'messageMedia', jid, id: message.id, imagePath: message.imagePath || '' })
+    bus.broadcast({ t: 'messageMedia', jid, id: message.id, imagePath: path })
   }
 
   bus.snapshot = snapshot
