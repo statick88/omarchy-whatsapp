@@ -1,5 +1,5 @@
-import { copyFileSync, mkdirSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { copyFileSync, mkdirSync, rmdirSync, unlinkSync } from 'node:fs'
+import { basename, dirname, join, sep } from 'node:path'
 import { mediaDir } from './paths.js'
 
 // The daemon runs with a private /tmp, so a file the user picked in a
@@ -27,4 +27,29 @@ export function stageOutgoing(source, wanted) {
   mkdirSync(dirname(target), { recursive: true, mode: 0o700 })
   copyFileSync(source, target)
   return target
+}
+
+// The copy has done its job once the message went out: WhatsApp has the file
+// now, and a retry re-sends what the server already holds.
+//
+// Only a staged copy is removed. A file the user picked lives in their own
+// directories and is theirs to keep, so it is never touched.
+export function discardStaged(path) {
+  const target = String(path || '')
+  if (!target.startsWith(join(mediaDir, 'outgoing') + sep)) return false
+
+  try {
+    unlinkSync(target)
+  } catch (err) {
+    // Already gone is the outcome that was asked for, not a failure.
+    if (err?.code !== 'ENOENT') return false
+  }
+
+  // The directory was made for that one file, so it can go with it.
+  try {
+    rmdirSync(dirname(target))
+  } catch {
+    // Not empty, or already gone: nothing left to clean up.
+  }
+  return true
 }

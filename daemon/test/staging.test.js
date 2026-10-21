@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 
-import { stageOutgoing } from '../lib/staging.js'
+import { discardStaged, stageOutgoing } from '../lib/staging.js'
 
 // The daemon cannot read the user's /tmp, so a file that is going out is
 // copied into the directory both of them can see.
@@ -65,4 +65,38 @@ test('a file can be given the name it should arrive with', () => {
 
 test('a file that is not there is refused', () => {
   assert.throws(() => stageOutgoing('/definitely/not/here.png'), /ENOENT|no such file/i)
+})
+
+test('a staged file is removed once it has gone out', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  const staged = stageOutgoing(source)
+  assert.equal(existsSync(staged), true)
+
+  // The copy was made for one message and nothing else needs it.
+  assert.equal(discardStaged(staged), true)
+  assert.equal(existsSync(staged), false)
+})
+
+test('a file that was never staged is never removed', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  // The user picked this file: it lives in their own directories and is
+  // theirs to keep.
+  assert.equal(discardStaged(source), false)
+  assert.equal(existsSync(source), true)
+})
+
+test('removing a file that is already gone is not a failure', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omarchy-whatsapp-stage-'))
+  const source = join(dir, 'photo.png')
+  writeFileSync(source, Buffer.from('a photo'))
+
+  const staged = stageOutgoing(source)
+  assert.equal(discardStaged(staged), true)
+  assert.equal(discardStaged(staged), true)
 })

@@ -1,4 +1,5 @@
 import { mediaMessageFor, prepareUpload } from './outgoing.js'
+import { discardStaged } from './staging.js'
 
 // One file, one WhatsApp message.
 //
@@ -23,6 +24,11 @@ export async function handleSendMedia(payload, reply, deps) {
 
   const routingJid = store.routingJid(rawJid) || rawJid
   const sent = await sock.sendMessage(routingJid, message, {})
+
+  // The copy the daemon made for this message has done its job: WhatsApp has
+  // the file now. A file that could not go out stays where it is, so it can
+  // be tried again without the user picking it all over again.
+  if (sent) discardStaged(upload.path)
 
   // The panel learns about the message the same way it learns about any other:
   // through the shared fan-out, so every monitor shows it.

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import net from 'node:net'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { Bus } from '../lib/server.js'
 import { handleSendMedia } from '../lib/send.js'
+import { discardStaged, stageOutgoing } from '../lib/staging.js'
 
 // The daemon is one process and the panel is another, and the only thing
 // between them is a newline-delimited JSON frame on a unix socket. So the
@@ -247,4 +248,65 @@ test('nothing is sent while WhatsApp is not connected', async () => {
       assert.equal(sends, 0)
     }
   )
+})
+
+test('the copy that went out does not stay behind', async () => {
+  const source = tempFile('photo.png')
+  // The copy the daemon reads is the one that travels.
+  const staged = stageOutgoing(source)
+
+  await withBus(
+    (payload, reply) => handleSendMedia(payload, reply, {
+      sock: {
+        async sendMessage() {
+          return { key: { id: 'MSG5' }, message: { imageMessage: {} }, status: 1 }
+        }
+      },
+      connection: 'open',
+      store: { routingJid: (jid) => jid },
+      deliver: () => {}
+    }),
+    async (socketPath) => {
+      const socket = await connect(socketPath)
+      const answer = readFrame(socket)
+      socket.write(JSON.stringify({ t: 'sendMedia', jid: '123@s.whatsapp.net', path: staged }) + '\n')
+      await answer
+      socket.destroy()
+    }
+  )
+
+  // The file is on WhatsApp's servers now, and the copy the daemon made for
+  // it has no reason to stay.
+  assert.equal(existsSync(staged), false)
+})
+
+test('a copy that could not go out stays, so it can be tried again', async () => {
+  const source = tempFile('photo.png')
+  const staged = stageOutgoing(source)
+
+  await withBus(
+    (payload, reply) => handleSendMedia(payload, reply, {
+      sock: {
+        async sendMessage() {
+          throw new Error('the network said no')
+        }
+      },
+      connection: 'open',
+      store: { routingJid: (jid) => jid },
+      deliver: () => {}
+    }),
+    async (socketPath) => {
+      const socket = await connect(socketPath)
+      const answer = readFrame(socket)
+      socket.write(JSON.stringify({ t: 'sendMedia', jid: '123@s.whatsapp.net', path: staged }) + '\n')
+      const frame = await answer
+      socket.destroy()
+      assert.equal(frame.t, 'error')
+    }
+  )
+
+  // The panel puts the file back in front of the user, so the copy it needs
+  // has to still be there.
+  assert.equal(existsSync(staged), true)
+  discardStaged(staged)
 })
