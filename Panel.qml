@@ -37,6 +37,11 @@ Panel {
   // A recording in progress, and where it is being written.
   property bool recording: false
   property string recordingPath: ""
+  // True between asking the recorder to stop and the file being finished.
+  property bool waitingForRecording: false
+  // The staging requests, one at a time: the staging process reads the file
+  // and the name it is given, so two requests in flight would mix them up.
+  property var stagingQueue: []
   // A file dropped on the panel, waiting to be attached.
   property string droppedPath: ""
   // The colour the drop surface tints itself with.
@@ -312,6 +317,24 @@ Panel {
     root.attachmentChat = root.activeJid
   }
 
+  // Staging a file: the name it travels with and whether it is a voice note
+  // belong to the request, not to the last one.
+  function stageFile(path, name, voice) {
+    root.stagingQueue = root.stagingQueue.concat([
+      { path: path, name: name || "", voice: voice === true }
+    ])
+    root.startStaging()
+  }
+
+  function startStaging() {
+    if (stager.running || root.stagingQueue.length === 0) return
+    var request = root.stagingQueue[0]
+    stager.source = request.path
+    stager.name = request.name
+    stager.voice = request.voice
+    stager.running = true
+  }
+
   // A voice note is played where it sits. A second press stops it.
   function toggleAudio(message) {
     if (!message || !message.imagePath) return
@@ -342,8 +365,14 @@ Panel {
   // is attached; without the converter the recording goes as a file.
   function stopRecording() {
     if (!root.recording) return
-    recorder.stop()
     root.recording = false
+    // The file has to be finished writing before it is converted, so the
+    // conversion waits for the recorder to stop.
+    root.waitingForRecording = true
+    recorder.stop()
+  }
+
+  function convertRecording() {
     var source = root.recordingPath
     var target = source.replace(/\.m4a$/, "") + ".opus"
     converter.source = source
@@ -365,9 +394,7 @@ Panel {
       } catch (err) {
         path = url.replace(/^file:\/\//, "")
       }
-      stager.source = path
-      stager.voice = false
-      stager.running = true
+      root.stageFile(path, "", false)
     }
   }
 
@@ -549,6 +576,12 @@ Panel {
     recorder: MediaRecorder {
       id: recorder
       outputLocation: ""
+      onStateChanged: {
+        if (state !== MediaRecorder.StoppedState) return
+        if (!root.waitingForRecording) return
+        root.waitingForRecording = false
+        root.convertRecording()
+      }
     }
   }
 
@@ -563,13 +596,16 @@ Panel {
     stdout: SplitParser {
       onRead: function (data) {
         var path = String(data || "").trim()
-        if (path.length === 0) return
+        var request = root.stagingQueue.length > 0 ? root.stagingQueue[0] : null
+        if (path.length === 0 || !request) return
         root.attachFile(path)
-        root.attachmentIsVoice = stager.voice
+        root.attachmentIsVoice = request.voice
       }
     }
     onExited: function (exitCode) {
+      if (root.stagingQueue.length > 0) root.stagingQueue = root.stagingQueue.slice(1)
       if (exitCode !== 0) root.statusLine = "Could not read the file to send"
+      root.startStaging()
     }
   }
 
@@ -580,21 +616,15 @@ Panel {
     property string target: ""
     command: ["ffmpeg", "-y", "-loglevel", "error", "-i", converter.source, "-c:a", "libopus", "-b:a", "32k", converter.target]
     onExited: function (exitCode) {
-      if (exitCode === 0 && root.recordingPath.length > 0) {
-        stager.source = converter.target
-        stager.name = "voice-note.opus"
-        stager.voice = true
-        stager.running = true
+      if (exitCode === 0) {
+        root.stageFile(converter.target, "voice-note.opus", true)
         root.statusLine = ""
         return
       }
       // Without opus the recording is not a voice note: WhatsApp plays a voice
       // note in place and this one would not play at all. It goes as a file,
       // and the person sending it is told that is what happened.
-      stager.source = converter.source
-      stager.name = "voice-note.m4a"
-      stager.voice = false
-      stager.running = true
+      root.stageFile(converter.source, "voice-note.m4a", false)
       root.statusLine = "The recording could not be turned into a voice note; it goes as a file"
     }
   }
@@ -1449,9 +1479,7 @@ Panel {
           if (!drop.hasUrls || drop.urls.length === 0) return
           var url = String(drop.urls[0])
           if (url.indexOf("file://") !== 0) return
-          stager.source = decodeURIComponent(url.replace(/^file:\/\//, ""))
-          stager.voice = false
-          stager.running = true
+          root.stageFile(decodeURIComponent(url.replace(/^file:\/\//, "")), "", false)
         }
 
         Rectangle {
