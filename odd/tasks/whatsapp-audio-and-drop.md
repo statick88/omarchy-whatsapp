@@ -101,6 +101,7 @@ plays it.
 | T20 | S4 | inline | 9cc4c61 | The copies that were never sent are swept. |
 | T21 | S4 | inline | a57060b | The text goes with the message, and only with it. |
 | T22 | S2 | inline | d65d6e1 | The panel loads again, and the recorder says when it fails. |
+| T23 | S4 | inline | 05772af | A send that never finishes says that nothing went out. |
 
 ---
 
@@ -427,3 +428,24 @@ One more thing the machine said: the shell of Omarchy does not recompile the
 QML of a plugin when it reloads it. The file on disk was right and the shell
 kept serving the old one, warning and all, until the shell was restarted
 (`omarchy-restart-shell`). T22.
+
+### L14 (2026-10-21)
+
+The review of the final candidate found one thing, and it was the opposite of
+the one before: the wait for the answer had no deadline.
+
+**The daemon waited for the upload of a file without a limit.** An upload that
+stops moving and never says so leaves the panel waiting for an answer that
+is not coming, and the panel cannot send anything else: not a message, not a
+file, nothing. The watchdog in the panel said that the message was still on
+its way and kept saying it, but it never let go, because letting go is what
+sends the message twice.
+
+The wait has a deadline now, in the daemon, where the answer belongs: when it
+passes, the panel is told that nothing went out and puts the caption and the
+file back, and the daemon asks WhatsApp for a new connection so the stuck
+upload goes with the one that carried it. T23.
+
+Both ways of losing were closed at once, because they are the same door seen
+from two sides: the panel does not let go of a message that may be on its
+way, and the daemon always answers, one way or another.
