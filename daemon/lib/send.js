@@ -1,6 +1,23 @@
 import { mediaMessageFor, prepareUpload } from './outgoing.js'
 import { discardStaged } from './staging.js'
 
+// How long a file has to go up before the daemon gives up on it.
+//
+// A file of sixteen megabytes on a slow connection takes its time, and a
+// message that is still on its way must not be sent twice. But an upload
+// that stops moving and never says so would leave the panel waiting for an
+// answer that is not coming, and the daemon from doing anything else.
+export const SEND_DEADLINE_MS = 60 * 1000
+
+// The answer, or a refusal when it takes too long.
+function withDeadline(promise, ms, message) {
+  let timer = null
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
+}
+
 // One file, one WhatsApp message.
 //
 // The daemon owns the socket, the store and the fan-out to the panels; this
@@ -23,7 +40,23 @@ export async function handleSendMedia(payload, reply, deps) {
   const message = mediaMessageFor(upload, payload.caption, { ptt: payload.ptt === true })
 
   const routingJid = store.routingJid(rawJid) || rawJid
-  const sent = await sock.sendMessage(routingJid, message, {})
+
+  let sent
+  try {
+    sent = await withDeadline(
+      sock.sendMessage(routingJid, message, {}),
+      deps.deadlineMs || SEND_DEADLINE_MS,
+      'send-media: the upload did not finish in time'
+    )
+  } catch (err) {
+    // The upload is stuck. The panel is told that nothing went out, so it
+    // puts the caption and the file back, and the daemon asks WhatsApp for a
+    // new connection: the stuck upload goes with the connection that carried
+    // it, and the daemon can do something else.
+    reply({ t: 'error', for: 'sendMedia', id, message: err?.message || 'the message was not sent' })
+    deps.reconnect?.()
+    return
+  }
 
   // Nothing went out: the panel is told so, because it would otherwise clear
   // the caption and the file for a message that never left.

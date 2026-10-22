@@ -1318,7 +1318,10 @@ async function handleCommand(payload, reply) {
         sock,
         connection,
         store,
-        deliver: deliverOutgoing
+        deliver: deliverOutgoing,
+        // An upload that stops moving takes the connection that carried it
+        // with it, so the daemon asks for a new one and is useful again.
+        reconnect: () => scheduleReconnect(0, { reason: 'the upload did not finish', countsAsFailure: false })
       })
       return
     }

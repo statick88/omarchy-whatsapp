@@ -376,3 +376,39 @@ test('a message that did not go out is not acknowledged', async () => {
     }
   )
 })
+
+test('a send that never finishes says that nothing went out', { timeout: 10000 }, async () => {
+  const path = tempFile('photo.png')
+  let reconnected = false
+  const sock = {
+    async sendMessage() {
+      // An upload that stops moving and never says so.
+      return new Promise(() => {})
+    }
+  }
+
+  await withBus(
+    (payload, reply) => handleSendMedia(payload, reply, {
+      sock,
+      connection: 'open',
+      store: { routingJid: (jid) => jid },
+      deliver: () => {},
+      deadlineMs: 50,
+      reconnect: () => { reconnected = true }
+    }),
+    async (socketPath) => {
+      const socket = await connect(socketPath)
+      const answer = readFrame(socket)
+      socket.write(JSON.stringify({ t: 'sendMedia', id: 'r9', jid: '123@s.whatsapp.net', path }) + '\n')
+      const frame = await answer
+      socket.destroy()
+
+      // The panel waits for the answer, so there has to be one.
+      assert.equal(frame.t, 'error')
+      assert.equal(frame.id, 'r9')
+      // And the daemon asks for a new connection, so the stuck upload does
+      // not keep it from doing anything else.
+      assert.equal(reconnected, true)
+    }
+  )
+})
