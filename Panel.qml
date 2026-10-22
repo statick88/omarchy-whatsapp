@@ -784,7 +784,9 @@ Panel {
         return
       }
       root.releasePendingSend()
-      root.statusLine = "The daemon did not answer; the message was not sent"
+      // The daemon is not answering at all, and it is the one that sends.
+      // It has to be started again for anything else to go out.
+      root.statusLine = "The daemon is not answering; it has to be started again"
     }
   }
 

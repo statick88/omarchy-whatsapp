@@ -1,23 +1,6 @@
 import { mediaMessageFor, prepareUpload } from './outgoing.js'
 import { discardStaged } from './staging.js'
 
-// How long a file has to go up before the daemon gives up on it.
-//
-// A file of sixteen megabytes on a slow connection takes its time, and a
-// message that is still on its way must not be sent twice. But an upload
-// that stops moving and never says so would leave the panel waiting for an
-// answer that is not coming, and the daemon from doing anything else.
-export const SEND_DEADLINE_MS = 60 * 1000
-
-// The answer, or a refusal when it takes too long.
-function withDeadline(promise, ms, message) {
-  let timer = null
-  const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms)
-  })
-  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer))
-}
-
 // One file, one WhatsApp message.
 //
 // The daemon owns the socket, the store and the fan-out to the panels; this
@@ -43,11 +26,11 @@ export async function handleSendMedia(payload, reply, deps) {
 
   let sent
   try {
-    sent = await withDeadline(
-      sock.sendMessage(routingJid, message, {}),
-      deps.deadlineMs || SEND_DEADLINE_MS,
-      'send-media: the upload did not finish in time'
-    )
+    // The upload has a deadline of its own: WhatsApp does not let a request
+    // hang for ever, so this wait ends one way or another. A deadline here
+    // would be a second opinion that can disagree with it, and the file
+    // could still go out after the daemon had said it did not.
+    sent = await sock.sendMessage(routingJid, message, {})
   } catch (err) {
     // The upload is stuck. The panel is told that nothing went out, so it
     // puts the caption and the file back, and the daemon asks WhatsApp for a
