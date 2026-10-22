@@ -102,6 +102,7 @@ plays it.
 | T21 | S4 | inline | a57060b | The text goes with the message, and only with it. |
 | T22 | S2 | inline | d65d6e1 | The panel loads again, and the recorder says when it fails. |
 | T23 | S4 | inline | 05772af | A send that never finishes says that nothing went out. |
+| T24 | S4 | inline | 1126a3b | The deadline belonged to WhatsApp, not to the daemon. |
 
 ---
 
@@ -449,3 +450,32 @@ upload goes with the one that carried it. T23.
 Both ways of losing were closed at once, because they are the same door seen
 from two sides: the panel does not let go of a message that may be on its
 way, and the daemon always answers, one way or another.
+
+### L15 (2026-10-21)
+
+The deadline that T23 put in the daemon was wrong, and the review said so with
+the reason in front of it.
+
+**A deadline in the daemon is a second opinion that can disagree with the one
+WhatsApp already has.** The upload of a file of sixteen megabytes on a slow
+connection takes its time, and sixty seconds can pass while the upload is
+still on its way. The daemon would say that nothing went out while the file
+went out anyway, and the panel, which believed it, would send it again: the
+other end would get it twice.
+
+The deadline was taken out. The wait ends when WhatsApp says so, one way or
+the other: the upload has a timeout of its own (`timeoutMs` in the request
+that uploads the media), and the relay of a text has one too (`waitForMessage`
+in the socket, which the daemon's own log shows expiring). The daemon waits
+for that answer and tells the panel which one it was. T24.
+
+**The panel says what to do when the daemon does not answer at all**: it is
+the one that sends, so it has to be started again for anything else to go
+out.
+
+What the review could not see, because it is not in the diff, is that the
+deadline it asked for was already there. The evidence is in
+`daemon/node_modules/baileys`: the upload asks for a timeout, and the relay
+of a text waits with one. A change made to answer a finding can be worse
+than the finding when the finding rests on something the diff does not
+show.
